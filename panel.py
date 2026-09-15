@@ -781,8 +781,9 @@ def apply_save_entry(cid, name, entry):
         add_event(record, datetime.fromisoformat(entry['t']), 'save-food', 'Food history changed in the colony save',
                   save.get('foods'), entry['foods'])
     if 'interactions' in save and 'interactions' in entry:  # older journal entries have no interactions to compare
-        before = {(i['kind'], i['text']) for i in save['interactions']}
-        after = {(i['kind'], i['text']) for i in entry['interactions']}
+        # Hidden-priority interactions (sleep talk and the like) never reach a player, so they make no events.
+        before = {(i['kind'], i['text']) for i in save['interactions'] if i['rank'] > 0}
+        after = {(i['kind'], i['text']) for i in entry['interactions'] if i['rank'] > 0}
         for kind, text in sorted(after - before):
             add_event(record, saved_at, 'interaction', f'{kind} started: {text}')
         for kind, text in sorted(before - after):
