@@ -273,6 +273,18 @@ section { margin-top: 34px; }
 .mini-slot { background: var(--slot); border-radius: 2px; box-shadow: inset 2px 2px 0 var(--slot-edge-dark); font-size: .7rem; font-weight: 600; line-height: 24px; overflow: hidden; text-align: center; white-space: nowrap; }
 .mini-slot.is-void { background: transparent; border: 1px dashed var(--line); box-shadow: none; }
 .mini-slot.in-run { box-shadow: inset 2px 2px 0 var(--slot-edge-dark), 0 0 0 1.5px var(--honey); }
+.interactions { display: grid; gap: 8px; list-style: none; margin: 8px 0 0; padding: 0; }
+.interactions li { border-left: 3px solid var(--line); display: grid; gap: 2px; padding: 4px 0 4px 12px; }
+.interactions li.is-urgent { border-left-color: var(--brick); }
+.interactions li.is-quiet { opacity: .7; }
+.interactions .interaction-text { font-size: 1.02rem; }
+.interactions .interaction-meta { color: var(--ink-soft); font-size: .9rem; }
+.interactions .interaction-meta strong { color: var(--ink); font-weight: 600; }
+.interactions li.is-urgent .interaction-meta strong { color: var(--brick); }
+.card-complaints { font-size: .9rem; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-complaints.is-urgent { color: var(--brick); }
+.list .who-meta .complains { color: var(--ink-soft); }
+.list .who-meta .complains.is-urgent { color: var(--brick); }
 .card-last { color: var(--ink-soft); font-size: .9rem; margin: 0; }
 .card-last strong { color: var(--ink); font-weight: 600; }
 .card-actions { display: flex; gap: 8px; justify-content: flex-end; }
@@ -414,6 +426,16 @@ section { margin-top: 34px; }
           </div>
         </section>
       </div>
+
+      <section aria-labelledby="complaintsTitle" id="complaintsSection">
+        <h3 id="complaintsTitle">Complaints and requests</h3>
+        <p class="note" id="complaintsSource"></p>
+        <ul class="interactions" id="interactions"></ul>
+        <div class="hunger-actions" id="saveActions">
+          <button type="button" id="saveNowBtn">Save now</button>
+          <p id="saveNowStatus" role="status">Complaints and answers only reach the panel when the world saves. Saves the world now instead of waiting for the next autosave.</p>
+        </div>
+      </section>
 
       <section aria-labelledby="eventsTitle">
         <h3 id="eventsTitle">What changed</h3>
@@ -584,6 +606,39 @@ function renderGlowSetting(meta) {
   });
 }
 
+const PRIORITY_LABELS = { hidden: 'Hidden', 'chit-chat': 'Chit-chat', pending: 'Pending', important: 'Important', blocking: 'Blocking' };
+
+function currentGameTick(meta) {
+  // The server's game time is read every few seconds; move it forward with the tick rate between readings.
+  if (meta.game_time === null || meta.game_time === undefined || !meta.game_time_at) return null;
+  return meta.game_time + Math.max(0, Date.now() / 1000 - meta.game_time_at) * (meta.tick_rate || 20);
+}
+
+function interactionVisibility(item, meta) {
+  if (item.priority === 'hidden') return 'Never shown to players';
+  const tick = currentGameTick(meta);
+  if (!item.shows_at || tick === null || item.shows_at <= tick) return 'Showing';
+  const seconds = (item.shows_at - tick) / (meta.tick_rate || 20);
+  return `Answered, shows again in about ${realTime(seconds)} (at tick ${item.shows_at})`;
+}
+
+function renderInteractions(list, meta) {
+  const ul = $('interactions');
+  ul.replaceChildren();
+  if (!list.length) {
+    ul.append(el('li', { class: 'is-quiet' }, 'Nothing pending.'));
+    return;
+  }
+  for (const item of list) {
+    const li = el('li', { class: item.rank >= 3 ? 'is-urgent' : (item.rank === 0 ? 'is-quiet' : '') });
+    li.append(el('span', { class: 'interaction-text' }, item.text));
+    const metaLine = el('span', { class: 'interaction-meta' });
+    metaLine.append(el('strong', {}, item.kind), `, ${PRIORITY_LABELS[item.priority] || item.priority}. ${interactionVisibility(item, meta)}.`);
+    li.append(metaLine);
+    ul.append(li);
+  }
+}
+
 function renderArrivals(changes) {
   const box = $('arrivalsBox');
   const summary = $('arrivalsSummary');
@@ -644,6 +699,7 @@ function renderList(list) {
     metaLine.append(`${c.job || 'no job'}, ${c.meals} meals`);
     if (c.duplicates) metaLine.append(', ', el('span', { class: 'dup' }, 'repeats'));
     if (c.following) metaLine.append(', ', el('span', { class: 'followed' }, 'following'));
+    if (c.complaints) metaLine.append(', ', el('span', { class: 'complains' + (c.urgent ? ' is-urgent' : '') }, `${c.complaints} ${c.complaints === 1 ? 'complaint' : 'complaints'}`));
     btn.append(metaLine);
     btn.addEventListener('click', () => select(c.key));
     li.append(btn);
@@ -737,6 +793,7 @@ function buildCard(id) {
     name: el('span', { class: 'card-name' }), id: el('span', { class: 'card-id' }, `#${id}`), job: el('span', { class: 'card-job' }),
     state: el('p', { class: 'card-state' }), fill: el('div', { class: 'fill' }), meter: el('div', { class: 'meter', role: 'img' }),
     satText: el('span'), satAgo: el('span'), strip: el('div', { class: 'mini-strip' }), last: el('p', { class: 'card-last' }),
+    complaints: el('p', { class: 'card-complaints' }),
   };
   open.append(refs.name, refs.id, refs.job);
   open.addEventListener('click', () => select(id));
@@ -755,7 +812,7 @@ function buildCard(id) {
     await poll();
   });
   actions.append(stop);
-  card.append(open, refs.state, refs.meter, sat, refs.strip, refs.last, actions);
+  card.append(open, refs.state, refs.meter, sat, refs.strip, refs.complaints, refs.last, actions);
   card._refs = refs;
   return card;
 }
@@ -789,9 +846,16 @@ function updateCard(card, c) {
     r.strip.dataset.key = key;
   }
   const e = c.last_event;
+  const shown = (c.interactions || []).filter((i) => i.rank > 0);
+  r.complaints.hidden = !shown.length;
+  if (shown.length) {
+    r.complaints.className = 'card-complaints' + (shown[0].rank >= 3 ? ' is-urgent' : '');
+    r.complaints.textContent = `${shown.length} ${shown.length === 1 ? 'complaint' : 'complaints'}: ${shown[0].text}`;
+    r.complaints.title = shown.map((i) => `${i.kind}: ${i.text}`).join('\n');
+  }
   r.last.replaceChildren();
   if (e) {
-    const kinds = { joined: 'Joined', left: 'Left', action: 'Panel', state: 'State', food: 'Food history', 'food-first': 'Food history', 'save-food': 'Colony save', hunger: 'Saturation' };
+    const kinds = { interaction: 'Complaints', joined: 'Joined', left: 'Left', action: 'Panel', state: 'State', food: 'Food history', 'food-first': 'Food history', 'save-food': 'Colony save', hunger: 'Saturation' };
     const text = e.kind === 'food' || e.kind === 'save-food' ? `${(e.after || []).slice(-1)[0] || 'emptied'}` : (e.kind === 'food-first' ? 'first reading' : e.text);
     r.last.append(el('strong', {}, kinds[e.kind] || e.kind), ` ${text}, ${ago(e.t, serverNow)}`);
     if (card.dataset.lastEvent && card.dataset.lastEvent !== e.t) {
@@ -846,7 +910,9 @@ function renderDetail(data) {
   $('name').textContent = c.name;
   const isFormer = Boolean(c.left_t);
   // A former citizen's ID now belongs to someone else, so nothing on the page may act on it.
-  for (const id of ['followBtn', 'locateBtn', 'hungerActions', 'mealActions', 'cmdSection']) $(id).hidden = isFormer;
+  for (const id of ['followBtn', 'locateBtn', 'hungerActions', 'mealActions', 'saveActions', 'cmdSection']) $(id).hidden = isFormer;
+  const saveNowBtn = $('saveNowBtn');
+  if (!saveNowBtn.dataset.busy) saveNowBtn.disabled = meta.rcon_status !== 'connected';
   $('formerNote').hidden = !isFormer;
   if (isFormer) {
     $('formerNote').textContent = `Left the colony ${ago(c.left_t, data.now)} (${clock(c.left_t)}). MineColonies gives ID ${c.id} to the next new citizen, so this is their saved history only.`;
@@ -918,6 +984,13 @@ function renderDetail(data) {
     if (repeats) stats.append('. ', el('span', { class: 'dup' }, `${repeats} back-to-back ${repeats === 1 ? 'repeat' : 'repeats'}`));
   }
 
+  // complaints, from the colony save
+  const interactions = save.interactions || [];
+  $('complaintsSource').textContent = save.t
+    ? (save.interactions ? `From the colony save at ${clock(save.t)}. What a player sees when talking to this citizen.` : 'The colony save has not been read since complaints were added to the panel.')
+    : 'No colony save yet.';
+  renderInteractions(interactions, meta);
+
   // now
   $('nowSource').textContent = log.t ? readFrom(log.source, log.t) : 'Run the info command to see what they are doing.';
   const unloaded = log.loaded === false;
@@ -950,7 +1023,7 @@ function renderDetail(data) {
   $('meter').setAttribute('aria-label', sat === undefined ? 'Saturation unknown' : `Saturation ${Number(sat).toFixed(1)} of 60`);
 
   // timeline
-  const kinds = { joined: 'Colony', left: 'Colony', action: 'Panel', state: 'State', job: 'Job', food: 'Food history', 'food-first': 'Food history', 'save-food': 'Colony save', hunger: 'Saturation' };
+  const kinds = { interaction: 'Complaints', joined: 'Colony', left: 'Colony', action: 'Panel', state: 'State', job: 'Job', food: 'Food history', 'food-first': 'Food history', 'save-food': 'Colony save', hunger: 'Saturation' };
   const events = $('events');
   events.replaceChildren();
   const list = [...(c.events || [])].reverse().slice(0, 200);
@@ -1103,6 +1176,7 @@ async function runServerAction(btn, status, url, question) {
 
 $('hungryAllBtn').addEventListener('click', () => runServerAction($('hungryAllBtn'), $('hungryAllStatus'), '/api/hungry?all=1',
   'Set every citizen\'s saturation to 2? They will all head off to eat at once.'));
+$('saveNowBtn').addEventListener('click', () => runServerAction($('saveNowBtn'), $('saveNowStatus'), '/api/save'));
 $('clearFoodAllBtn').addEventListener('click', () => runServerAction($('clearFoodAllBtn'), $('clearFoodAllStatus'), '/api/food-history/clear?all=1',
   'Clear the food history of every citizen in the colony? Their meal records in game are emptied, as if they had never eaten.'));
 $('hungryBtn').addEventListener('click', () => runServerAction($('hungryBtn'), $('hungryStatus'), `/api/hungry?id=${$('hungryBtn').dataset.id}`));

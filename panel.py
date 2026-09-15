@@ -27,6 +27,7 @@ import shutil
 import tempfile
 import threading
 import time
+import zipfile
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -48,6 +49,8 @@ TICK_RATE_SECONDS = 5       # how often /tick query is asked for the current rat
 GLOW_CHOICES = (10, 30, 60, 120, 300)  # Locate outline lengths offered on the page, in real seconds
 DEFAULT_GLOW_SECONDS = 30   # as long as MineColonies' own colony map tracking highlight
 GLOW_SLACK = 1.5            # the effect gets this much extra game time; the panel clears it at the exact real time
+CHAT_PRIORITIES = ('hidden', 'chit-chat', 'pending', 'important', 'blocking')  # MineColonies ChatPriority order
+INTERACTION_KINDS = {'standard': 'Complaint', 'simplenotification': 'Notice', 'request': 'Request', 'quest': 'Quest'}
 ROSTER_SECONDS = 10         # how often the full citizen list is read over RCON
 RENAME_WINDOW_SECONDS = 60  # a new name on an ID seen this soon after the last citizen list is a rename, later a replacement
 NEW_CITIZEN_MINUTES = 30    # a citizen who joined within this long is shown as new
@@ -61,6 +64,7 @@ names = {}
 watched = {}
 following = set()
 roster = {}                 # citizen id -> name, everyone in the colony at the last roster reading
+translations = {}           # translation key -> English text, from the language files of the server's mods
 former = []                 # records of citizens who left, each with a key like "57.1"; MineColonies reuses their IDs
 missing_since = {}          # citizen id -> first reading they were missing from; they only count as gone after a second one
 wake_poller = threading.Event()  # set to cut the RCON poller's wait short
@@ -73,7 +77,8 @@ meta = {'log_path': None, 'save_path': None, 'log_updated': None, 'save_updated'
         'citizen_count': None, 'roster_t': None, 'roster_source': None,
         'poll_ticks': DEFAULT_POLL_TICKS, 'poll_ticks_choices': list(POLL_TICKS), 'tick_rate': None,
         'poll_interval': DEFAULT_POLL_TICKS / VANILLA_TICK_RATE, 'poll_loop_seconds': None,
-        'glow_seconds': DEFAULT_GLOW_SECONDS, 'glow_choices': list(GLOW_CHOICES)}
+        'glow_seconds': DEFAULT_GLOW_SECONDS, 'glow_choices': list(GLOW_CHOICES),
+        'game_time': None, 'game_time_at': None}
 server_dir = None           # dedicated server folder, for one-off RCON commands from the page
 HUNGRY_SATURATION = 2.0     # just under the 2.5 at which a citizen goes to eat
 
@@ -397,6 +402,75 @@ def server_tick_rate(client):
         return None
 
 
+def server_game_time(client):
+    """World game time in ticks, from /time query gametime ("The time is 7512345")."""
+    m = re.search(r'(\d+)\s*$', CODES_RE.sub('', client.command('time query gametime')).strip())
+    return int(m.group(1)) if m else None
+
+
+def load_translations(folder):
+    """English text for translation keys, from every mod jar and the Minecraft server jar the server runs."""
+    jars = sorted(glob.glob(str(Path(folder) / 'mods' / '*.jar')))
+    jars += sorted(glob.glob(str(Path(folder) / 'libraries' / 'net' / 'minecraft' / 'server' / '*' / '*-extra.jar')))
+    for jar in jars:
+        try:
+            with zipfile.ZipFile(os.path.realpath(jar)) as archive:
+                for name in archive.namelist():
+                    if name.startswith('assets/') and name.endswith('/lang/en_us.json'):
+                        translations.update(json.loads(archive.read(name).decode('utf-8')))
+        except (OSError, zipfile.BadZipFile, ValueError):
+            continue  # an unreadable jar only means some messages stay as keys
+    return len(translations)
+
+
+def render_component(component):
+    """Plain text for a chat component as MineColonies stores it (JSON text, translate with arguments, extra)."""
+    if isinstance(component, str):
+        return component
+    if isinstance(component, list):
+        return ''.join(render_component(part) for part in component)
+    if not isinstance(component, dict):
+        return ''
+    if 'translate' in component:
+        key = component['translate']
+        pattern = translations.get(key, component.get('fallback') or key.rsplit('.', 1)[-1].replace('_', ' '))
+        args = [render_component(arg) for arg in component.get('with', [])]
+        position = iter(range(len(args)))
+
+        def fill(match):
+            if match.group(0) == '%%':
+                return '%'
+            index = int(match.group(1)) - 1 if match.group(1) else next(position, None)
+            return args[index] if index is not None and index < len(args) else ''
+        text = re.sub(r'%%|%(?:(\d+)\$)?[sd]', fill, pattern)
+    else:
+        text = component.get('text', '')
+    return text + ''.join(render_component(extra) for extra in component.get('extra', []))
+
+
+def interactions_from_save(rec):
+    """A citizen's pending interactions (complaints, notices, requests, quests) from their saved chat options."""
+    found = []
+    for option in rec.get('chatoptions', []):
+        chat = option.get('chatoption', option) if isinstance(option, dict) else {}
+        kind = chat.get('handlertype', '')
+        inquiry = chat.get('inquiry', '')
+        try:
+            parsed = json.loads(inquiry) if inquiry else ''
+        except ValueError:
+            parsed = inquiry
+        if kind == 'quest':
+            quest = str(parsed).split('/')[-1].replace('_', ' ')
+            text = f'Quest offer: {quest}'
+        else:
+            text = render_component(parsed)
+        priority = chat.get('priority', 0)
+        found.append({'kind': INTERACTION_KINDS.get(kind, kind or 'Other'), 'text': text,
+                      'priority': CHAT_PRIORITIES[priority] if 0 <= priority < len(CHAT_PRIORITIES) else str(priority),
+                      'rank': priority, 'shows_at': chat.get('delay', 0) or 0})
+    return sorted(found, key=lambda item: (-item['rank'], item['text']))
+
+
 def colony_citizen_count(client, colony):
     """The colony's own citizen count, from /mc colony info ("Citizens: 113/150")."""
     m = re.search(r'Citizens:\s*(\d+)\s*/', CODES_RE.sub('', client.command(f'mc colony info {colony}')))
@@ -491,6 +565,28 @@ def make_hungry(cids=None):
     single = f"Saturation set to {done[0][1]:.1f} as {outcome['player']}. They go to eat on their next check." if done else ''
     return summarize_modify(outcome, done, failed, single,
                             '{done} of {total} citizens set to saturation ' + f'{HUNGRY_SATURATION:.0f}' + ' as {player}.')
+
+
+def save_now():
+    """Ask the server to save the world now, so the colony save (complaints, answers, food) is fresh. Returns (ok, message)."""
+    if not server_dir:
+        return False, 'The panel is not connected to a local server.'
+    client = rcon_client(server_dir)
+    if client is None:
+        return False, 'RCON is not enabled on the local server.'
+    try:
+        client.connect()
+        reply = CODES_RE.sub('', client.command('save-all')).strip()
+    except ConnectionRefusedError:
+        return False, 'The local server is offline.'
+    except (OSError, RconError) as error:
+        return False, f'Could not reach the server: {error}'
+    finally:
+        client.close()
+    if 'Saved the game' not in reply and 'Saving the game' not in reply:
+        return False, reply or 'The server gave no answer.'
+    reload_save.set()  # pick the new save up on the next check instead of waiting for it to settle twice
+    return True, 'World saved. The panel reads the new colony save within a few seconds.'
 
 
 def clear_food_history(cids=None):
@@ -611,9 +707,12 @@ def poll_rcon(server_dir):
             player = operators[0] if operators else None
             if now - last_tick_rate >= TICK_RATE_SECONDS:
                 rate = server_tick_rate(client)
+                game_time = server_game_time(client)
                 with lock:
                     meta['tick_rate'] = rate
                     update_poll_interval()
+                    if game_time is not None:
+                        meta['game_time'], meta['game_time_at'] = game_time, time.time()
                 last_tick_rate = now
             if now - last_roster >= ROSTER_SECONDS or meta.get('roster_t') is None:
                 # The list is paged over a HashMap, so citizens added between page requests can shift the order and
@@ -681,6 +780,13 @@ def apply_save_entry(cid, name, entry):
     if save and save.get('foods') != entry['foods']:
         add_event(record, datetime.fromisoformat(entry['t']), 'save-food', 'Food history changed in the colony save',
                   save.get('foods'), entry['foods'])
+    if 'interactions' in save and 'interactions' in entry:  # older journal entries have no interactions to compare
+        before = {(i['kind'], i['text']) for i in save['interactions']}
+        after = {(i['kind'], i['text']) for i in entry['interactions']}
+        for kind, text in sorted(after - before):
+            add_event(record, saved_at, 'interaction', f'{kind} started: {text}')
+        for kind, text in sorted(before - after):
+            add_event(record, saved_at, 'interaction', f'{kind} ended: {text}')
     if {k: v for k, v in save.items() if k != 't'} != {k: v for k, v in entry.items() if k != 't'}:
         write_journal({'type': 'save', 'id': cid, 'name': record['name'], 'entry': entry})
     save.clear()
@@ -748,6 +854,7 @@ def apply_save(root, mtime):
             'job': job.get('type', '').split(':')[-1] or None,
             'inventory_stacks': len(rec.get('inventory', [])),
             'inventory_size': rec.get('invsize'),
+            'interactions': interactions_from_save(rec),
         }
         apply_save_entry(rec['id'], rec.get('name'), entry)
     meta['save_updated'] = iso(when)
@@ -954,7 +1061,10 @@ def summary(record):
             'meals': len(items), 'duplicates': dupes, 'last': max(times) if times else None,
             'following': not is_former and record['id'] in following,
             'in_colony': False if is_former else ((record['id'] in roster) if meta.get('roster_t') else None),
-            'joined': joined[-1] if joined else None}
+            'joined': joined[-1] if joined else None,
+            # Saved interactions a player can see, counted for the list; hidden-priority ones (like sleep talk) are left out.
+            'complaints': sum(1 for i in record['save'].get('interactions', []) if i['rank'] > 0),
+            'urgent': any(i['rank'] >= 3 for i in record['save'].get('interactions', []))}
 
 
 def followed_card(record):
@@ -971,7 +1081,8 @@ def followed_card(record):
                 foods=log_food if use_log_food else save.get('foods', []),
                 saturation=log.get('saturation') if live_sat else save.get('saturation'),
                 saturation_t=log.get('saturation_t') if live_sat else save.get('t'),
-                last_event=changes[-1] if changes else None)
+                last_event=changes[-1] if changes else None,
+                interactions=save.get('interactions', []), interactions_t=save.get('t'))
 
 
 def roster_changes(limit=5):
@@ -1028,6 +1139,9 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
         if url.path == '/api/hungry' and (query.get('id', [''])[0].isdigit() or query.get('all') == ['1']):
             ok, message = make_hungry(None if query.get('all') == ['1'] else [int(query['id'][0])])
+            self.send(200 if ok else 409, json.dumps({'ok': ok, 'message': message}), 'application/json')
+        elif url.path == '/api/save':
+            ok, message = save_now()
             self.send(200 if ok else 409, json.dumps({'ok': ok, 'message': message}), 'application/json')
         elif url.path == '/api/food-history/clear' and (query.get('id', [''])[0].isdigit() or query.get('all') == ['1']):
             ok, message = clear_food_history(None if query.get('all') == ['1'] else [int(query['id'][0])])
@@ -1104,6 +1218,7 @@ def main():
                          str(world / 'minecolonies' / '*' / '*' / 'colony*.dat')]
         threading.Thread(target=follow_save, args=(save_patterns,), daemon=True).start()
     if server is not None:
+        print(f'  translations: {load_translations(server)} keys from the server\'s mods', flush=True)
         global server_dir
         server_dir = str(server)
         meta['rcon_status'] = 'offline'
