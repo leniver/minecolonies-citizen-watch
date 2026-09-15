@@ -1,0 +1,1076 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citizen watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ground: #262B31;
+  --panel: #2E343B;
+  --slot: #343B43;
+  --slot-edge-dark: rgba(0, 0, 0, .38);
+  --slot-edge-light: rgba(255, 255, 255, .07);
+  --line: #3E464F;
+  --ink: #E4E7EA;
+  --ink-soft: #A7AFB7;
+  --honey: #E3A83B;
+  --emerald: #46B37A;
+  --brick: #D26A5A;
+  --focus: #8FC3FF;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --ground: #E6E9EC;
+    --panel: #F2F4F6;
+    --slot: #D4D9DE;
+    --slot-edge-dark: rgba(0, 0, 0, .16);
+    --slot-edge-light: rgba(255, 255, 255, .7);
+    --line: #C7CDD3;
+    --ink: #1F2429;
+    --ink-soft: #56606A;
+    --honey: #A8700F;
+    --emerald: #1F8751;
+    --brick: #B0463A;
+    --focus: #1D5FB8;
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 16px/1.45 "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.app {
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  min-height: 100vh;
+}
+
+/* roster */
+.roster {
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  position: sticky;
+  top: 0;
+}
+.roster-head { padding: 20px 18px 12px; }
+.brand-row { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
+.brand { font-size: 1.35rem; font-weight: 700; margin: 0; letter-spacing: .01em; }
+.settings-btn { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); cursor: pointer; font: inherit; font-size: .9rem; padding: 2px 10px; }
+.settings-btn:hover { color: var(--ink); }
+
+.arrivals-box { margin: 0 0 10px; }
+.arrivals-box summary { align-items: baseline; border-radius: 4px; color: var(--ink-soft); cursor: pointer; display: grid; font-size: .92rem; gap: 6px; grid-template-columns: auto minmax(0, 1fr) auto; list-style: none; padding: 2px 0; }
+.arrivals-box summary::-webkit-details-marker { display: none; }
+.arrivals-box summary::before { content: "\25B8"; display: inline-block; transition: transform .15s ease; }
+.arrivals-box[open] summary::before { transform: rotate(90deg); }
+.arrivals-box summary .summary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arrivals-box summary .summary-new { color: var(--emerald); font-weight: 600; }
+.arrivals-box summary.is-fresh { animation: arrive-row 1.4s ease-out 1; }
+.arrivals-box .arrivals { margin: 4px 0 0; }
+
+dialog.settings { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); max-width: calc(100vw - 32px); padding: 0; width: 440px; }
+dialog.settings::backdrop { background: rgba(0, 0, 0, .45); }
+.settings form { display: grid; gap: 16px; padding: 18px 20px 16px; }
+.settings h2 { font-size: 1.35rem; font-weight: 700; margin: 0; }
+.settings .dialog-actions { display: flex; justify-content: flex-end; }
+.settings .dialog-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 16px; }
+@media (prefers-reduced-motion: reduce) { .arrivals-box summary::before { transition: none; } .arrivals-box summary.is-fresh { animation: none; } }
+.colony { color: var(--ink-soft); margin: 2px 0 4px; font-size: .95rem; }
+.live { color: var(--ink-soft); font-size: .95rem; margin: 0 0 12px; }
+.live.is-live::before { background: var(--emerald); border-radius: 50%; content: ""; display: inline-block; height: 8px; margin-right: 7px; width: 8px; }
+.search {
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  padding: 8px 10px;
+  width: 100%;
+}
+.list { list-style: none; margin: 0; overflow-y: auto; padding: 4px 8px 16px; }
+.list button {
+  align-items: baseline;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 2px 8px;
+  grid-template-columns: 1fr auto;
+  padding: 7px 10px;
+  text-align: left;
+  width: 100%;
+}
+.list button:hover { background: var(--slot); }
+.list button[aria-selected="true"] { background: var(--slot); box-shadow: inset 3px 0 0 var(--ink); }
+.list .who-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .who-id { color: var(--ink-soft); }
+.list .who-meta { color: var(--ink-soft); font-size: .88rem; grid-column: 1 / -1; }
+.list .who-meta .dup { color: var(--honey); }
+.list .who-meta .followed { color: var(--emerald); }
+.list .who-meta .is-new { color: var(--emerald); font-weight: 600; }
+.list button.has-left .who-name, .list button.has-left .who-id { color: var(--ink-soft); text-decoration: line-through; }
+.arrivals { list-style: none; margin: 0 0 12px; padding: 0; }
+.arrivals li { font-size: .9rem; }
+.arrivals button { align-items: baseline; background: none; border: 0; color: inherit; cursor: pointer; display: grid; font: inherit; gap: 6px; grid-template-columns: auto minmax(0, 1fr) auto; padding: 1px 0; text-align: left; width: 100%; }
+.arrivals .arrival-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arrivals button:hover .arrival-name { text-decoration: underline; }
+.arrivals .kind-joined { color: var(--emerald); font-weight: 600; }
+.arrivals .kind-left { color: var(--ink-soft); font-weight: 600; }
+.arrivals time { color: var(--ink-soft); }
+.arrivals li.is-fresh { animation: arrive-row 1.4s ease-out 1; }
+@keyframes arrive-row { from { background: color-mix(in srgb, var(--emerald) 35%, transparent); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .arrivals li.is-fresh { animation: none; } }
+
+/* detail */
+main { padding: 28px clamp(18px, 4vw, 48px) 48px; max-width: 1120px; }
+.empty-state { color: var(--ink-soft); font-size: 1.15rem; margin-top: 18vh; text-align: center; }
+
+.who-top { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.who h2 { font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 700; line-height: 1.05; margin: 0; }
+.follow { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
+.locate { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
+.locate.is-glowing, .card-actions button.is-glowing { border-color: var(--honey); color: var(--honey); }
+.locate:disabled, .card-actions button:disabled { cursor: default; }
+.locate-status { color: var(--ink-soft); font-size: .95rem; margin: 6px 0 0; }
+.locate-status.is-error { color: var(--brick); }
+.follow[aria-pressed="true"] { background: none; border-color: var(--emerald); color: var(--emerald); }
+.follow-note { color: var(--ink-soft); font-size: .95rem; margin: 6px 0 0; }
+.who .sub { color: var(--ink-soft); font-size: 1.1rem; margin: 4px 0 0; }
+.freshness { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 0; color: var(--ink-soft); }
+.freshness span::before {
+  background: var(--ink-soft);
+  border-radius: 50%;
+  content: "";
+  display: inline-block;
+  height: 8px;
+  margin-right: 7px;
+  vertical-align: 1px;
+  width: 8px;
+}
+.freshness .is-fresh::before { background: var(--emerald); }
+.freshness .is-missing::before { background: var(--brick); }
+
+h3 { font-size: 1.15rem; font-weight: 600; margin: 0 0 4px; }
+.note { color: var(--ink-soft); margin: 0 0 12px; }
+section { margin-top: 34px; }
+
+/* the meal strip */
+.strip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  margin-top: 8px;
+}
+.slot {
+  align-items: center;
+  background: var(--slot);
+  border-radius: 3px;
+  box-shadow: inset 3px 3px 0 var(--slot-edge-dark), inset -3px -3px 0 var(--slot-edge-light);
+  display: flex;
+  font-size: .92rem;
+  font-weight: 500;
+  justify-content: center;
+  line-height: 1.15;
+  min-height: 84px;
+  padding: 8px 6px;
+  position: relative;
+  text-align: center;
+  word-break: break-word;
+}
+.slot.is-void { background: transparent; box-shadow: none; border: 2px dashed var(--line); color: var(--ink-soft); }
+.slot.in-run { box-shadow: inset 3px 3px 0 var(--slot-edge-dark), inset -3px -3px 0 var(--slot-edge-light), 0 0 0 2px var(--honey); }
+.slot.links-next::after {
+  background: var(--honey);
+  border-radius: 2px;
+  content: "";
+  height: 6px;
+  position: absolute;
+  right: -12px;
+  top: calc(50% - 3px);
+  width: 14px;
+}
+.slot.is-fresh { animation: arrive 1.1s ease-out 1; }
+@keyframes arrive {
+  from { background: var(--emerald); color: var(--ground); }
+  to { background: var(--slot); }
+}
+.strip-ends { color: var(--ink-soft); display: flex; font-size: .9rem; justify-content: space-between; margin-top: 6px; }
+.meal-stats { margin: 12px 0 0; font-size: 1.05rem; }
+.meal-stats .dup { color: var(--honey); font-weight: 600; }
+
+/* now + hunger */
+.pair { display: grid; gap: 34px; grid-template-columns: 1.2fr 1fr; }
+.pair section { margin-top: 34px; }
+.state-now { font-size: 1.9rem; font-weight: 700; line-height: 1.1; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.facts { display: grid; gap: 2px 14px; grid-template-columns: max-content 1fr; margin: 0; }
+.facts dt { color: var(--ink-soft); }
+.facts dd { margin: 0; }
+.ai-history { border-left: 2px solid var(--line); color: var(--ink-soft); font-size: .92rem; list-style: none; margin: 12px 0 0; padding: 0 0 0 12px; }
+
+.meter { background: var(--slot); border-radius: 3px; box-shadow: inset 3px 3px 0 var(--slot-edge-dark); height: 26px; margin: 10px 0 6px; overflow: hidden; position: relative; }
+.meter .fill { background: var(--emerald); height: 100%; transition: width .4s ease; }
+.meter .fill.is-low { background: var(--honey); }
+.meter .fill.is-eating { background: var(--brick); }
+.meter .eat-line { background: var(--ink); height: 100%; left: calc(2.5 / 60 * 100%); position: absolute; top: 0; width: 2px; }
+.meter-scale { color: var(--ink-soft); display: flex; font-size: .9rem; justify-content: space-between; }
+.hunger-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 14px; }
+.hunger-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
+.hunger-actions button:disabled { cursor: default; opacity: .55; }
+.hunger-actions p { color: var(--ink-soft); flex: 1 1 14rem; margin: 0; }
+.hunger-actions p.is-error { color: var(--brick); }
+.roster-actions { margin: 0 0 12px; }
+.roster-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 12px; width: 100%; }
+.roster-actions button:disabled { cursor: default; opacity: .55; }
+.roster-actions p { color: var(--ink-soft); font-size: .9rem; margin: 6px 0 0; }
+.roster-actions p.is-error { color: var(--brick); }
+.board-link { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; margin: 0 0 12px; padding: 6px 12px; text-align: left; width: 100%; }
+.board-link[aria-current="page"] { border-color: var(--emerald); box-shadow: inset 3px 0 0 var(--emerald); }
+
+/* followed board */
+.board-head h2 { font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 700; line-height: 1.05; margin: 0; }
+.board-head .sub { color: var(--ink-soft); font-size: 1.1rem; margin: 4px 0 0; }
+.cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); margin-top: 22px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: grid; gap: 9px; padding: 12px 14px; }
+.card.is-fresh { animation: arrive-row 1.4s ease-out 1; }
+.card-open { background: none; border: 0; color: inherit; cursor: pointer; display: grid; font: inherit; gap: 0 8px; grid-template-columns: 1fr auto; padding: 0; text-align: left; }
+.card-open:hover .card-name { text-decoration: underline; }
+.card-name { font-size: 1.2rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-id { color: var(--ink-soft); }
+.card-job { color: var(--ink-soft); font-size: .92rem; grid-column: 1 / -1; }
+.card-state { font-size: 1.35rem; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.card-state small { color: var(--ink-soft); font-size: .9rem; font-weight: 500; }
+.card .meter { height: 14px; margin: 0; }
+.card-sat { color: var(--ink-soft); display: flex; font-size: .88rem; justify-content: space-between; }
+.mini-strip { display: grid; gap: 3px; grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.mini-slot { background: var(--slot); border-radius: 2px; box-shadow: inset 2px 2px 0 var(--slot-edge-dark); font-size: .7rem; font-weight: 600; line-height: 24px; overflow: hidden; text-align: center; white-space: nowrap; }
+.mini-slot.is-void { background: transparent; border: 1px dashed var(--line); box-shadow: none; }
+.mini-slot.in-run { box-shadow: inset 2px 2px 0 var(--slot-edge-dark), 0 0 0 1.5px var(--honey); }
+.card-last { color: var(--ink-soft); font-size: .9rem; margin: 0; }
+.card-last strong { color: var(--ink); font-weight: 600; }
+.card-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.card-actions button { background: none; border: 1px solid var(--line); border-radius: 5px; color: var(--ink-soft); cursor: pointer; font: inherit; font-size: .88rem; padding: 2px 10px; }
+.card-actions button:hover { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .card.is-fresh { animation: none; } }
+
+.refresh { align-items: center; display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 12px; }
+.refresh label { color: var(--ink-soft); font-size: .95rem; }
+.refresh select { background: var(--ground); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: inherit; padding: 3px 6px; }
+.refresh p { color: var(--ink-soft); font-size: .88rem; margin: 0; width: 100%; }
+.refresh p.is-slow { color: var(--honey); }
+.info { display: inline-flex; position: relative; }
+.info-btn { align-items: center; background: none; border: 1.5px solid var(--ink-soft); border-radius: 50%; color: var(--ink-soft); cursor: help; display: inline-flex; font: 600 .75rem/1 "Barlow Semi Condensed", system-ui, sans-serif; font-style: italic; height: 18px; justify-content: center; padding: 0; width: 18px; }
+.info-btn:hover, .info-btn:focus-visible { border-color: var(--ink); color: var(--ink); }
+.info-tip { background: var(--ink); border-radius: 5px; bottom: calc(100% + 8px); color: var(--panel); font-size: .88rem; left: 50%; line-height: 1.35; opacity: 0; padding: 6px 9px; pointer-events: none; position: absolute; transform: translateX(-50%); transition: opacity .12s ease; width: max-content; max-width: 240px; z-index: 2; }
+.info:hover .info-tip, .info-btn:focus-visible + .info-tip { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .info-tip { transition: none; } }
+.sat-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; margin: 2px 0 0; }
+
+/* timeline */
+.events { list-style: none; margin: 8px 0 0; padding: 0; }
+.events li { border-top: 1px solid var(--line); display: grid; gap: 4px 16px; grid-template-columns: 88px 1fr; padding: 9px 0; }
+.events time { color: var(--ink-soft); }
+.events .kind { font-weight: 600; }
+.events .kind-food, .events .kind-save-food { color: var(--honey); }
+.mini { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 2; margin-top: 2px; }
+.mini-label { color: var(--ink-soft); font-size: .88rem; margin-right: 4px; min-width: 42px; }
+.chip { background: var(--slot); border-radius: 3px; font-size: .86rem; padding: 1px 7px; }
+.chip.in-run { box-shadow: 0 0 0 1.5px var(--honey); }
+.chip.none { background: none; color: var(--ink-soft); font-style: italic; padding-left: 0; }
+
+/* commands */
+.commands { display: grid; gap: 8px; margin-top: 8px; }
+.command { align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: grid; gap: 4px 12px; grid-template-columns: 1fr auto; padding: 9px 12px; }
+.command code { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: .92rem; overflow-wrap: anywhere; }
+.command p { color: var(--ink-soft); font-size: .92rem; grid-column: 1; margin: 0; }
+.command button { background: var(--slot); border: 1px solid var(--line); border-radius: 5px; color: var(--ink); cursor: pointer; font: inherit; grid-row: 1 / span 2; grid-column: 2; padding: 5px 12px; }
+.problem { background: color-mix(in srgb, var(--brick) 18%, transparent); border-left: 3px solid var(--brick); margin: 14px 0 0; padding: 8px 12px; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .roster { max-height: none; position: static; }
+  .list { max-height: 40vh; }
+  .pair { grid-template-columns: 1fr; gap: 0; }
+  .strip { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .slot.links-next:nth-child(5n)::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot.is-fresh { animation: none; }
+  .meter .fill { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="roster">
+    <div class="roster-head">
+      <div class="brand-row">
+        <h1 class="brand">Citizen watch</h1>
+        <button type="button" class="settings-btn" id="settingsBtn" aria-haspopup="dialog">Settings</button>
+      </div>
+      <p class="colony" id="colony">Waiting for the colony save</p>
+      <details class="arrivals-box" id="arrivalsBox" hidden>
+        <summary id="arrivalsSummary"><span class="summary-text" id="arrivalsSummaryText"></span><time id="arrivalsSummaryAgo"></time></summary>
+        <ul class="arrivals" id="arrivals" aria-label="Recent arrivals and departures"></ul>
+      </details>
+      <p class="live" id="liveStatus"></p>
+      <button type="button" class="board-link" id="boardBtn">Followed citizens</button>
+      <div class="roster-actions">
+        <button type="button" id="hungryAllBtn">Make everyone hungry</button>
+        <p id="hungryAllStatus" role="status" hidden></p>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Find by name or ID" aria-label="Find a citizen">
+    </div>
+    <ul class="list" id="list" role="listbox" aria-label="Citizens"></ul>
+  </aside>
+
+  <main>
+    <div id="board" hidden>
+      <header class="board-head">
+        <h2>Followed citizens</h2>
+        <p class="sub" id="boardSub"></p>
+      </header>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <p class="empty-state" id="empty">Pick a citizen to follow them.</p>
+
+    <div id="view" hidden>
+      <header class="who">
+        <div class="who-top">
+          <h2 id="name"></h2>
+          <button class="follow" id="followBtn" type="button" aria-pressed="false">Keep following</button>
+          <button class="locate" id="locateBtn" type="button" title="Outline this citizen in game for 30 seconds">Locate</button>
+        </div>
+        <p class="sub" id="sub"></p>
+        <p class="locate-status" id="locateStatus" role="status" hidden></p>
+        <p class="follow-note" id="followNote" hidden>Read from the server at the interval set in the sidebar, even with this page closed. Everything is kept in the journal.</p>
+        <p class="freshness"><span id="logFresh"></span><span id="saveFresh"></span></p>
+        <div id="problems"></div>
+      </header>
+
+      <section aria-labelledby="mealsTitle">
+        <h3 id="mealsTitle">Last 10 meals</h3>
+        <p class="note" id="mealsSource"></p>
+        <div class="strip" id="strip"></div>
+        <div class="strip-ends"><span>Oldest</span><span>Newest</span></div>
+        <p class="meal-stats" id="mealStats"></p>
+      </section>
+
+      <div class="pair">
+        <section aria-labelledby="nowTitle">
+          <h3 id="nowTitle">Doing now</h3>
+          <p class="note" id="nowSource"></p>
+          <p class="state-now" id="stateNow"></p>
+          <dl class="facts" id="facts"></dl>
+          <ul class="ai-history" id="aiHistory"></ul>
+        </section>
+
+        <section aria-labelledby="hungerTitle">
+          <h3 id="hungerTitle">Hunger</h3>
+          <p class="note" id="hungerSource"></p>
+          <p class="sat-value" id="satValue"></p>
+          <div class="meter" role="img" id="meter"><div class="fill" id="satFill"></div><div class="eat-line"></div></div>
+          <div class="meter-scale"><span>Goes to eat at 2.5</span><span>Full at 60</span></div>
+          <div class="hunger-actions">
+            <button type="button" id="hungryBtn">Make hungry</button>
+            <p id="hungryStatus" role="status"></p>
+          </div>
+        </section>
+      </div>
+
+      <section aria-labelledby="eventsTitle">
+        <h3 id="eventsTitle">What changed</h3>
+        <p class="note">Newest first. Food changes show the history before and after.</p>
+        <ol class="events" id="events"></ol>
+      </section>
+
+      <section aria-labelledby="cmdTitle">
+        <h3 id="cmdTitle">Refresh from the game</h3>
+        <p class="note" id="cmdNote"></p>
+        <div class="commands" id="commands"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog class="settings" id="settings" aria-labelledby="settingsTitle">
+  <form method="dialog">
+    <h2 id="settingsTitle">Settings</h2>
+    <div class="refresh">
+      <label for="interval">Read from the server every</label>
+      <select id="interval"></select>
+      <p id="intervalNote" role="status"></p>
+    </div>
+    <div class="refresh">
+      <label for="glow">Locate makes a citizen glow for</label>
+      <select id="glow" aria-describedby="glowInfo"></select>
+      <span class="info">
+        <button type="button" class="info-btn" aria-label="About the glow duration" aria-describedby="glowInfo">i</button>
+        <span class="info-tip" role="tooltip" id="glowInfo">Real time. The panel adjusts it for the server's tick rate.</span>
+      </span>
+    </div>
+    <div class="dialog-actions"><button type="submit">Done</button></div>
+  </form>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selectedId = null;
+let lastStripItems = null;
+let lastStripFor = null;
+let citizensCache = [];
+
+function readSelection() {
+  const fromHash = parseInt(location.hash.slice(1), 10);
+  if (!Number.isNaN(fromHash)) return fromHash;
+  try { const saved = parseInt(localStorage.getItem('citizen-watch-id'), 10); if (!Number.isNaN(saved)) return saved; } catch (e) {}
+  return null;
+}
+
+let boardMode = location.hash === '#followed';
+
+function showBoard() {
+  boardMode = true;
+  history.replaceState(null, '', '#followed');
+  poll();
+}
+
+function select(id) {
+  boardMode = false;
+  selectedId = id;
+  history.replaceState(null, '', '#' + id);
+  try { localStorage.setItem('citizen-watch-id', String(id)); } catch (e) {}
+  poll();
+}
+
+function ago(iso, nowIso) {
+  if (!iso) return null;
+  const seconds = Math.max(0, (new Date(nowIso) - new Date(iso)) / 1000);
+  if (seconds < 60) return `${Math.round(seconds)} s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  return `${Math.round(seconds / 3600)} h ago`;
+}
+let serverNow = null;
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const clock = (iso) => {
+  if (!iso) return '';
+  const time = iso.slice(11, 19);
+  if (serverNow && iso.slice(0, 10) === serverNow.slice(0, 10)) return time;
+  return `${parseInt(iso.slice(8, 10), 10)} ${MONTH_NAMES[parseInt(iso.slice(5, 7), 10) - 1]} ${time}`;
+};
+const readFrom = (source, iso) => source === 'rcon' ? `Live from the server, read at ${clock(iso)}.`
+  : (source === 'old-log' ? `From an info command in an older game log, ${clock(iso)}.` : `From the info command at ${clock(iso)}.`);
+
+function runs(items) {
+  // mark each index that belongs to a run of identical neighbours
+  const inRun = new Array(items.length).fill(false);
+  const linksNext = new Array(items.length).fill(false);
+  for (let i = 0; i + 1 < items.length; i++) {
+    if (items[i] === items[i + 1]) { inRun[i] = inRun[i + 1] = true; linksNext[i] = true; }
+  }
+  return { inRun, linksNext };
+}
+
+function el(tag, attrs = {}, text) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') node.className = v; else node.setAttribute(k, v);
+  }
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+let newWindowMinutes = 30;
+const seenRosterChanges = new Set();
+let rosterChangesRendered = false;
+
+function isNew(c) {
+  return c.in_colony !== false && c.joined && serverNow && (new Date(serverNow) - new Date(c.joined)) < newWindowMinutes * 60000;
+}
+
+const SECONDS_PER_CITIZEN = 0.013; // two RCON commands, measured on the local server
+
+function realTime(seconds) {
+  if (seconds < 0.001) return 'under 1 ms';
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} s`;
+}
+
+function ticksText(ticks) {
+  return `${ticks} ${ticks === 1 ? 'tick' : 'ticks'}`;
+}
+
+function renderInterval(meta) {
+  const select = $('interval');
+  const choices = meta.poll_ticks_choices || [];
+  const rate = meta.tick_rate || 20;
+  const signature = `${choices.join(',')}@${rate}`;
+  if (select.dataset.choices !== signature) {
+    // Each choice also shows what it means in real time at the server's current tick rate.
+    select.replaceChildren(...choices.map((t) => el('option', { value: String(t) }, `${ticksText(t)} (${realTime(t / rate)})`)));
+    select.dataset.choices = signature;
+  }
+  if (document.activeElement !== select) select.value = String(meta.poll_ticks);
+  select.disabled = meta.rcon_status === 'disabled';
+  const count = new Set([...(meta.following || []), ...(!boardMode && selectedId !== null ? [selectedId] : [])]).size;
+  const note = $('intervalNote');
+  const loop = meta.poll_loop_seconds ?? count * SECONDS_PER_CITIZEN;
+  const slow = loop > meta.poll_interval;
+  note.className = slow ? 'is-slow' : '';
+  const reads = count === 0
+    ? 'Nobody is being read right now.'
+    : `${count} ${count === 1 ? 'citizen' : 'citizens'} read, one round takes ${realTime(loop)}${slow ? ', longer than the interval, so reads run back to back and take time from the game' : ''}.`;
+  note.replaceChildren(reads, el('br'), `Server at ${rate} ticks per second${meta.tick_rate ? '' : ' (assumed)'}.`);
+}
+
+function renderGlowSetting(meta) {
+  const select = $('glow');
+  const choices = meta.glow_choices || [];
+  if (select.dataset.choices !== choices.join(',')) {
+    select.replaceChildren(...choices.map((s) => el('option', { value: String(s) }, s < 60 ? `${s} s` : `${s / 60} min`)));
+    select.dataset.choices = choices.join(',');
+  }
+  if (document.activeElement !== select) select.value = String(meta.glow_seconds);
+  select.disabled = meta.rcon_status === 'disabled';
+  document.querySelectorAll('[data-locate-id]').forEach((button) => {
+    button.title = `Outline this citizen in game for ${meta.glow_seconds < 60 ? `${meta.glow_seconds} seconds` : `${meta.glow_seconds / 60} min`}`;
+  });
+}
+
+function renderArrivals(changes) {
+  const box = $('arrivalsBox');
+  const summary = $('arrivalsSummary');
+  const latest = (changes || [])[0];
+  box.hidden = !latest;
+  if (latest) {
+    const recent = latest.kind === 'joined' && serverNow && (new Date(serverNow) - new Date(latest.t)) < newWindowMinutes * 60000;
+    const text = $('arrivalsSummaryText');
+    if (box.open) {
+      // The list below already shows the latest entry, so the header just names the section.
+      text.replaceChildren('Recent arrivals and departures');
+      text.title = '';
+      $('arrivalsSummaryAgo').textContent = '';
+    } else {
+      text.replaceChildren(el('span', { class: recent ? 'summary-new' : '' }, latest.kind === 'joined' ? 'Joined' : 'Left'), ` ${latest.name} #${latest.id}`);
+      text.title = `${latest.kind === 'joined' ? 'Joined' : 'Left'}: ${latest.name} #${latest.id}`;
+      $('arrivalsSummaryAgo').textContent = ago(latest.t, serverNow);
+    }
+    const key = `${latest.t}:${latest.kind}:${latest.id}`;
+    if (rosterChangesRendered && !seenRosterChanges.has(key)) {
+      summary.classList.remove('is-fresh');
+      void summary.offsetWidth; // restart the flash so a closed list still shows something happened
+      summary.classList.add('is-fresh');
+    }
+  }
+  const ul = $('arrivals');
+  ul.replaceChildren();
+  for (const change of changes || []) {
+    const key = `${change.t}:${change.kind}:${change.id}`;
+    const li = el('li', { class: rosterChangesRendered && !seenRosterChanges.has(key) ? 'is-fresh' : '' });
+    seenRosterChanges.add(key);
+    const btn = el('button', { type: 'button' });
+    btn.append(el('span', { class: `kind-${change.kind}` }, change.kind === 'joined' ? 'Joined' : 'Left'),
+      el('span', { class: 'arrival-name', title: `${change.name} #${change.id}` }, `${change.name} #${change.id}`), el('time', { datetime: change.t }, ago(change.t, serverNow)));
+    btn.addEventListener('click', () => select(change.id));
+    li.append(btn);
+    ul.append(li);
+  }
+  ul.hidden = !(changes && changes.length);
+  rosterChangesRendered = true;
+}
+
+function renderList(list) {
+  citizensCache = list;
+  const query = $('search').value.trim().toLowerCase();
+  const ul = $('list');
+  ul.replaceChildren();
+  // Citizens who left the colony go to the bottom.
+  const ordered = [...list].sort((a, b) => (a.in_colony === false) - (b.in_colony === false) || a.id - b.id);
+  for (const c of ordered) {
+    if (query && !(`${c.name} ${c.id}`.toLowerCase().includes(query))) continue;
+    const li = el('li');
+    const btn = el('button', { role: 'option', 'aria-selected': String(!boardMode && c.id === selectedId), class: c.in_colony === false ? 'has-left' : '' });
+    btn.append(el('span', { class: 'who-name' }, c.name), el('span', { class: 'who-id' }, `#${c.id}`));
+    const metaLine = el('span', { class: 'who-meta' });
+    if (c.in_colony === false) metaLine.append('left the colony, ');
+    else if (isNew(c)) metaLine.append(el('span', { class: 'is-new' }, 'new'), ', ');
+    metaLine.append(`${c.job || 'no job'}, ${c.meals} meals`);
+    if (c.duplicates) metaLine.append(', ', el('span', { class: 'dup' }, 'repeats'));
+    if (c.following) metaLine.append(', ', el('span', { class: 'followed' }, 'following'));
+    btn.append(metaLine);
+    btn.addEventListener('click', () => select(c.id));
+    li.append(btn);
+    ul.append(li);
+  }
+}
+
+function chips(items, into) {
+  if (!items || items.length === 0) { into.append(el('span', { class: 'chip none' }, 'empty')); return; }
+  const { inRun } = runs(items);
+  items.forEach((item, i) => into.append(el('span', { class: 'chip' + (inRun[i] ? ' in-run' : '') }, item)));
+}
+
+function renderStrip(items, citizenId) {
+  const strip = $('strip');
+  const previous = lastStripFor === citizenId ? lastStripItems : null;
+  strip.replaceChildren();
+  const padded = [...items];
+  while (padded.length < 10) padded.push(null);
+  const { inRun, linksNext } = runs(items);
+  padded.forEach((item, i) => {
+    const slot = el('div', { class: 'slot' });
+    if (item === null) {
+      slot.classList.add('is-void');
+      slot.setAttribute('aria-label', 'No meal recorded');
+    } else {
+      slot.textContent = item;
+      if (inRun[i]) slot.classList.add('in-run');
+      if (linksNext[i]) slot.classList.add('links-next');
+      if (previous && previous[i] !== item) slot.classList.add('is-fresh');
+    }
+    strip.append(slot);
+  });
+  lastStripItems = items;
+  lastStripFor = citizenId;
+}
+
+const cardEls = new Map();
+
+function shortFood(name) {
+  // Two letters per word is enough to tell foods apart in a 30 px slot; the full name is in the tooltip.
+  const words = name.split(/\s+/);
+  return words.length === 1 ? name.slice(0, 3) : words.map((w) => w[0]).join('').slice(0, 3);
+}
+
+const glowUntil = new Map(); // citizen id -> time the in-game outline ends, so every Locate button for them shows it
+
+async function locate(id, button, statusEl) {
+  button.disabled = true;
+  let body;
+  try {
+    const res = await fetch(`/api/locate?id=${id}`, { method: 'POST' });
+    body = await res.json();
+  } catch (err) {
+    body = { ok: false, message: 'The panel server did not answer.' };
+  }
+  if (body.ok) glowUntil.set(id, Date.now() + body.seconds * 1000);
+  if (statusEl) {
+    statusEl.hidden = false;
+    statusEl.textContent = body.ok ? `${body.message} Look for the outline in game.` : body.message;
+    statusEl.className = 'locate-status' + (body.ok ? '' : ' is-error');
+  } else if (!body.ok) {
+    button.title = body.message;
+    button.textContent = 'Not loaded';
+    setTimeout(() => { button.textContent = 'Locate'; }, 3000);
+  }
+  button.disabled = false;
+  renderGlow();
+}
+
+function renderGlow() {
+  // Show a countdown on every Locate button whose citizen is still outlined.
+  document.querySelectorAll('[data-locate-id]').forEach((button) => {
+    const until = glowUntil.get(Number(button.dataset.locateId));
+    const left = until ? Math.ceil((until - Date.now()) / 1000) : 0;
+    if (left > 0) {
+      button.textContent = `Glowing ${left} s`;
+      button.classList.add('is-glowing');
+    } else if (button.classList.contains('is-glowing')) {
+      button.textContent = 'Locate';
+      button.classList.remove('is-glowing');
+    }
+  });
+}
+setInterval(renderGlow, 500);
+
+function buildCard(id) {
+  const card = el('article', { class: 'card' });
+  const open = el('button', { type: 'button', class: 'card-open' });
+  const refs = {
+    name: el('span', { class: 'card-name' }), id: el('span', { class: 'card-id' }, `#${id}`), job: el('span', { class: 'card-job' }),
+    state: el('p', { class: 'card-state' }), fill: el('div', { class: 'fill' }), meter: el('div', { class: 'meter', role: 'img' }),
+    satText: el('span'), satAgo: el('span'), strip: el('div', { class: 'mini-strip' }), last: el('p', { class: 'card-last' }),
+  };
+  open.append(refs.name, refs.id, refs.job);
+  open.addEventListener('click', () => select(id));
+  refs.state.style.margin = '0';
+  refs.meter.append(refs.fill, el('div', { class: 'eat-line' }));
+  const sat = el('div', { class: 'card-sat' });
+  sat.append(refs.satText, refs.satAgo);
+  const actions = el('div', { class: 'card-actions' });
+  const locateBtn = el('button', { type: 'button', title: 'Outline this citizen in game for 30 seconds', 'data-locate-id': String(id) }, 'Locate');
+  locateBtn.addEventListener('click', () => locate(id, locateBtn, null));
+  actions.append(locateBtn);
+  const stop = el('button', { type: 'button' }, 'Stop following');
+  stop.addEventListener('click', async () => {
+    stop.disabled = true;
+    await fetch(`/api/follow?id=${id}&on=0`, { method: 'POST' });
+    await poll();
+  });
+  actions.append(stop);
+  card.append(open, refs.state, refs.meter, sat, refs.strip, refs.last, actions);
+  card._refs = refs;
+  return card;
+}
+
+function updateCard(card, c) {
+  const r = card._refs;
+  r.name.textContent = c.name;
+  r.job.textContent = [c.job || 'no job', c.in_colony === false ? 'left the colony' : null].filter(Boolean).join(', ');
+  r.state.replaceChildren(c.loaded === false ? 'Not loaded' : (c.state || 'Unknown'));
+  if (c.job_state && c.loaded !== false) r.state.append(' ', el('small', {}, c.job_state));
+  const sat = c.saturation;
+  const pct = sat === null || sat === undefined ? 0 : Math.max(0, Math.min(100, (sat / 60) * 100));
+  r.fill.style.width = pct + '%';
+  r.fill.className = 'fill' + (sat !== null && sat !== undefined && sat <= 2.5 ? ' is-eating' : (sat !== null && sat !== undefined && sat <= 10 ? ' is-low' : ''));
+  r.meter.setAttribute('aria-label', sat === null || sat === undefined ? 'Saturation unknown' : `Saturation ${Number(sat).toFixed(1)} of 60`);
+  r.satText.textContent = sat === null || sat === undefined ? 'Hunger unknown' : `Saturation ${Number(sat).toFixed(1)} of 60`;
+  r.satAgo.textContent = c.saturation_t ? ago(c.saturation_t, serverNow) : '';
+  const items = c.foods || [];
+  const key = items.join('|');
+  if (r.strip.dataset.key !== key) {
+    const { inRun } = runs(items);
+    const slots = [];
+    for (let i = 0; i < 10; i++) {
+      const item = items[i];
+      const slot = el('span', { class: 'mini-slot' + (item === undefined ? ' is-void' : '') + (inRun[i] ? ' in-run' : '') }, item === undefined ? '' : shortFood(item));
+      if (item !== undefined) slot.title = item;
+      slots.push(slot);
+    }
+    r.strip.replaceChildren(...slots);
+    r.strip.setAttribute('aria-label', items.length ? `Last meals: ${items.join(', ')}` : 'No meals recorded');
+    r.strip.dataset.key = key;
+  }
+  const e = c.last_event;
+  r.last.replaceChildren();
+  if (e) {
+    const kinds = { joined: 'Joined', left: 'Left', action: 'Panel', state: 'State', food: 'Food history', 'food-first': 'Food history', 'save-food': 'Colony save', hunger: 'Saturation' };
+    const text = e.kind === 'food' || e.kind === 'save-food' ? `${(e.after || []).slice(-1)[0] || 'emptied'}` : (e.kind === 'food-first' ? 'first reading' : e.text);
+    r.last.append(el('strong', {}, kinds[e.kind] || e.kind), ` ${text}, ${ago(e.t, serverNow)}`);
+    if (card.dataset.lastEvent && card.dataset.lastEvent !== e.t) {
+      card.classList.remove('is-fresh');
+      void card.offsetWidth; // restart the flash
+      card.classList.add('is-fresh');
+    }
+    card.dataset.lastEvent = e.t;
+  } else {
+    r.last.textContent = 'No changes recorded yet.';
+  }
+}
+
+function renderBoard(data) {
+  $('board').hidden = !boardMode;
+  $('boardBtn').setAttribute('aria-current', boardMode ? 'page' : 'false');
+  const list = data.followed || [];
+  $('boardBtn').textContent = `Followed citizens (${list.length})`;
+  if (!boardMode) return;
+  const m = data.meta;
+  $('boardSub').textContent = list.length
+    ? `${list.length} followed, read from the server every ${ticksText(m.poll_ticks)} (${realTime(m.poll_interval)}) even with this page closed.`
+    : 'Nobody is followed yet. Open a citizen from the list and press Keep following.';
+  const cards = $('cards');
+  const keep = new Set();
+  for (const c of list) {
+    keep.add(c.id);
+    let card = cardEls.get(c.id);
+    if (!card) { card = buildCard(c.id); cardEls.set(c.id, card); }
+    updateCard(card, c);
+    cards.append(card); // keeps cards in ID order without rebuilding them
+  }
+  for (const [id, card] of cardEls) {
+    if (!keep.has(id)) { card.remove(); cardEls.delete(id); }
+  }
+}
+
+function renderDetail(data) {
+  if (boardMode) {
+    $('empty').hidden = true;
+    $('view').hidden = true;
+    return;
+  }
+  const c = data.selected;
+  const meta = data.meta;
+  $('empty').hidden = !!c;
+  $('view').hidden = !c;
+  if (!c) return;
+  const log = c.log || {};
+  const save = c.save || {};
+
+  $('name').textContent = c.name;
+  const followed = (meta.following || []).includes(c.id);
+  const followBtn = $('followBtn');
+  followBtn.setAttribute('aria-pressed', String(followed));
+  followBtn.textContent = followed ? 'Stop following' : 'Keep following';
+  followBtn.dataset.id = String(c.id);
+  $('followNote').hidden = !followed;
+  const locateBtn = $('locateBtn');
+  if (locateBtn.dataset.locateId !== String(c.id)) {
+    locateBtn.dataset.locateId = String(c.id);
+    $('locateStatus').hidden = true;
+    renderGlow();
+  }
+  const hungryBtn = $('hungryBtn');
+  const operator = (meta.operators_online || [])[0];
+  const hint = meta.rcon_status !== 'connected' ? 'Needs the local server running.'
+    : (operator ? `Sets saturation to 2 as ${operator}, just under where they go to eat.` : 'Needs an operator connected in Creative.');
+  if (hungryBtn.dataset.id !== String(c.id) || hungryBtn.dataset.hint !== hint) {
+    $('hungryStatus').textContent = hint;
+    $('hungryStatus').className = '';
+  }
+  hungryBtn.dataset.id = String(c.id);
+  hungryBtn.dataset.hint = hint;
+  if (!hungryBtn.dataset.busy) hungryBtn.disabled = meta.rcon_status !== 'connected' || !operator;
+  const job = log.job || save.job;
+  $('sub').textContent = `#${c.id}${job ? `, ${job}` : ''}`;
+
+  const logAgo = ago(log.t, data.now);
+  const saveAgo = ago(save.t, data.now);
+  const lf = $('logFresh'); const sf = $('saveFresh');
+  lf.textContent = logAgo ? (log.source === 'rcon' ? `Server reading ${logAgo}` : `Last info command ${logAgo}`) : 'No reading yet';
+  lf.className = !log.t ? 'is-missing' : ((new Date(data.now) - new Date(log.t)) < 60000 ? 'is-fresh' : '');
+  sf.textContent = saveAgo ? `Colony save ${saveAgo}` : 'No colony save yet';
+  sf.className = !save.t ? 'is-missing' : '';
+
+  const problems = $('problems');
+  problems.replaceChildren();
+  for (const p of [meta.journal_error, meta.log_error, meta.save_error].filter(Boolean)) problems.append(el('p', { class: 'problem' }, p));
+
+  // meals: prefer whichever source is newer
+  const logFood = log.food;
+  const useLog = logFood && (!save.t || !log.t || log.t >= save.t);
+  const items = useLog ? logFood.items : (save.foods || []);
+  $('mealsSource').textContent = useLog
+    ? readFrom(log.source, log.t)
+    : (save.t ? `From the colony save at ${clock(save.t)}. Run the info command for a fresher reading.` : 'Nothing read yet.');
+  renderStrip(items, c.id);
+
+  const distinct = new Set(items).size;
+  const repeats = runs(items).linksNext.filter(Boolean).length;
+  const stats = $('mealStats');
+  stats.replaceChildren();
+  if (items.length === 0) {
+    stats.append('No meals recorded.');
+  } else {
+    stats.append(`${distinct} different ${distinct === 1 ? 'food' : 'foods'} in ${items.length} ${items.length === 1 ? 'meal' : 'meals'}`);
+    if (useLog) stats.append(`, quality ${logFood.quality}${logFood.full ? '' : ', history not full'}`);
+    if (repeats) stats.append('. ', el('span', { class: 'dup' }, `${repeats} back-to-back ${repeats === 1 ? 'repeat' : 'repeats'}`));
+  }
+
+  // now
+  $('nowSource').textContent = log.t ? readFrom(log.source, log.t) : 'Run the info command to see what they are doing.';
+  const unloaded = log.loaded === false;
+  $('stateNow').textContent = unloaded ? 'Not loaded' : (log.state || 'Unknown');
+  if (unloaded) $('nowSource').textContent = 'Nobody is near the colony, so this citizen is not being simulated. Their saved data still updates.';
+  const facts = $('facts');
+  facts.replaceChildren();
+  const addFact = (k, v) => { if (v === undefined || v === null || v === '') return; facts.append(el('dt', {}, k), el('dd', {}, v)); };
+  addFact('Job state', log.job_state);
+  addFact('Health', log.health ? `${log.health[0]} of ${log.health[1]}` : null);
+  addFact('Position', log.position ? log.position.join(', ') : null);
+  addFact('Stuck level', log.stuck);
+  if (save.t) addFact('Inventory', `${save.inventory_stacks} of ${save.inventory_size} slots used`);
+  const hist = $('aiHistory');
+  hist.replaceChildren();
+  (log.ai_history || []).slice(-4).forEach((line) => hist.append(el('li', {}, line)));
+  hist.hidden = unloaded || !(log.ai_history && log.ai_history.length);
+
+  // hunger: prefer the live modify reading when newer than the save
+  const liveSat = log.saturation !== undefined && (!save.t || (log.saturation_t && log.saturation_t >= save.t));
+  const sat = liveSat ? log.saturation : save.saturation;
+  $('hungerSource').textContent = liveSat
+    ? (log.saturation_source === 'rcon' ? `Live from the server, read at ${clock(log.saturation_t)}.` : `From the saturation command at ${clock(log.saturation_t)}.`)
+    : (save.t ? `From the colony save at ${clock(save.t)}.` : 'No reading yet.');
+  $('satValue').textContent = sat === undefined ? 'Unknown' : `${Number(sat).toFixed(1)} of 60`;
+  const fill = $('satFill');
+  const pct = sat === undefined ? 0 : Math.max(0, Math.min(100, (sat / 60) * 100));
+  fill.style.width = pct + '%';
+  fill.className = 'fill' + (sat !== undefined && sat <= 2.5 ? ' is-eating' : (sat !== undefined && sat <= 10 ? ' is-low' : ''));
+  $('meter').setAttribute('aria-label', sat === undefined ? 'Saturation unknown' : `Saturation ${Number(sat).toFixed(1)} of 60`);
+
+  // timeline
+  const kinds = { joined: 'Colony', left: 'Colony', action: 'Panel', state: 'State', job: 'Job', food: 'Food history', 'food-first': 'Food history', 'save-food': 'Colony save', hunger: 'Saturation' };
+  const events = $('events');
+  events.replaceChildren();
+  const list = [...(c.events || [])].reverse().slice(0, 200);
+  if (list.length === 0) events.append(el('li', {}, 'Nothing yet. Changes appear here as you run the commands below.'));
+  for (const e of list) {
+    const li = el('li');
+    li.append(el('time', { datetime: e.t }, clock(e.t)));
+    const body = el('div');
+    body.append(el('span', { class: `kind kind-${e.kind}` }, kinds[e.kind] || e.kind), ` ${e.kind === 'food-first' || e.kind === 'food' || e.kind === 'save-food' ? '' : e.text}`);
+    li.append(body);
+    if (e.before !== null || e.after !== null) {
+      if (e.before !== null) { const row = el('div', { class: 'mini' }); row.append(el('span', { class: 'mini-label' }, 'Before')); chips(e.before, row); li.append(row); }
+      if (e.after !== null) { const row = el('div', { class: 'mini' }); row.append(el('span', { class: 'mini-label' }, e.before === null ? 'Read' : 'After')); chips(e.after, row); li.append(row); }
+    }
+    events.append(li);
+  }
+
+  // commands
+  const colony = meta.colony_id ?? 1;
+  const cmds = [
+    [`/mc citizens info ${colony} ${c.id}`, 'Refreshes what they are doing and their last 10 meals.'],
+    [`/mc citizens modify ${colony} ${c.id} saturation + 0`, 'Reads their hunger without changing it.'],
+    ['/mc backup', 'Rewrites the colony save for every citizen, at most every 5 minutes.'],
+  ];
+  const box = $('commands');
+  if (box.dataset.for !== String(c.id) + ':' + colony) {
+    box.replaceChildren();
+    for (const [cmd, help] of cmds) {
+      const row = el('div', { class: 'command' });
+      const btn = el('button', { type: 'button' }, 'Copy');
+      btn.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(cmd); btn.textContent = 'Copied'; }
+        catch (err) { btn.textContent = 'Copy failed'; }
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1400);
+      });
+      row.append(el('code', {}, cmd), btn, el('p', {}, help));
+      box.append(row);
+    }
+    box.dataset.for = String(c.id) + ':' + colony;
+  }
+  $('cmdNote').textContent = window.__rconLive ? 'The panel runs the first two itself every second while the local server is up.' : 'Type these in game, the panel picks up the result.';
+}
+
+async function poll() {
+  try {
+    const url = '/api/state' + (!boardMode && selectedId !== null ? `?id=${selectedId}` : '');
+    const res = await fetch(url, { cache: 'no-store' });
+    const data = await res.json();
+    serverNow = data.now;
+    const count = data.meta.citizen_count;
+    const countText = count === null || count === undefined ? '' : `${count} ${count === 1 ? 'citizen' : 'citizens'}${data.meta.roster_source === 'save' ? ' at the last save' : ''}`;
+    $('colony').textContent = data.meta.colony ? [data.meta.colony, countText].filter(Boolean).join(', ') : (countText || 'Waiting for the colony save');
+    newWindowMinutes = data.meta.new_citizen_minutes || newWindowMinutes;
+    renderArrivals(data.meta.roster_changes);
+    renderInterval(data.meta);
+    renderGlowSetting(data.meta);
+    const rs = data.meta.rcon_status; const live = $('liveStatus');
+    live.className = 'live' + (rs === 'connected' ? ' is-live' : '');
+    const ops = data.meta.operators_online || [];
+    live.textContent = rs === 'connected' ? `Live from the local server, ${ops.length ? `${ops.join(', ')} online` : 'no operator online'}` : (rs === 'offline' ? 'Local server offline, using log and save' : (rs === 'disabled' ? 'Using log and save' : `Server: ${rs}`));
+    window.__rconLive = rs === 'connected';
+    const allBtn = $('hungryAllBtn');
+    if (!allBtn.dataset.busy) allBtn.disabled = rs !== 'connected' || !ops.length;
+    allBtn.title = rs !== 'connected' ? 'Needs the local server running.' : (ops.length ? `Runs as ${ops[0]}` : 'Needs an operator connected in Creative.');
+    if (selectedId === null && data.citizens.length) { /* keep the empty state until someone is picked */ }
+    renderList(data.citizens);
+    renderBoard(data);
+    renderDetail(data);
+  } catch (err) {
+    $('colony').textContent = 'The panel server stopped. Start panel.py again.';
+  }
+}
+
+$('search').addEventListener('input', () => renderList(citizensCache));
+$('boardBtn').addEventListener('click', showBoard);
+$('settingsBtn').addEventListener('click', () => $('settings').showModal());
+try { $('arrivalsBox').open = localStorage.getItem('citizen-watch-arrivals-open') === '1'; } catch (e) {}
+$('arrivalsBox').addEventListener('toggle', () => {
+  try { localStorage.setItem('citizen-watch-arrivals-open', $('arrivalsBox').open ? '1' : '0'); } catch (e) {}
+  poll();
+});
+$('glow').addEventListener('change', async () => {
+  const select = $('glow');
+  select.disabled = true;
+  try {
+    await fetch(`/api/settings?glow=${encodeURIComponent(select.value)}`, { method: 'POST' });
+    await poll();
+  } finally {
+    select.disabled = false;
+  }
+});
+$('interval').addEventListener('change', async () => {
+  const select = $('interval');
+  select.disabled = true;
+  try {
+    await fetch(`/api/settings?ticks=${encodeURIComponent(select.value)}`, { method: 'POST' });
+    await poll();
+  } finally {
+    select.disabled = false;
+  }
+});
+$('hungryAllBtn').addEventListener('click', async () => {
+  if (!window.confirm('Set every citizen\'s saturation to 2? They will all head off to eat at once.')) return;
+  const btn = $('hungryAllBtn');
+  const status = $('hungryAllStatus');
+  btn.disabled = true;
+  btn.dataset.busy = '1';
+  status.hidden = false;
+  status.className = '';
+  status.textContent = 'Sending to the server';
+  try {
+    const res = await fetch('/api/hungry?all=1', { method: 'POST' });
+    const body = await res.json();
+    status.textContent = body.message;
+    status.className = body.ok ? '' : 'is-error';
+  } catch (err) {
+    status.textContent = 'The panel server did not answer.';
+    status.className = 'is-error';
+  } finally {
+    delete btn.dataset.busy;
+    await poll();
+  }
+});
+$('hungryBtn').addEventListener('click', async () => {
+  const btn = $('hungryBtn');
+  const status = $('hungryStatus');
+  btn.disabled = true;
+  btn.dataset.busy = '1';
+  status.className = '';
+  status.textContent = 'Sending to the server';
+  try {
+    const res = await fetch(`/api/hungry?id=${btn.dataset.id}`, { method: 'POST' });
+    const body = await res.json();
+    status.textContent = body.message;
+    status.className = body.ok ? '' : 'is-error';
+  } catch (err) {
+    status.textContent = 'The panel server did not answer.';
+    status.className = 'is-error';
+  } finally {
+    delete btn.dataset.busy;
+    await poll();
+  }
+});
+$('locateBtn').addEventListener('click', () => locate(Number($('locateBtn').dataset.locateId), $('locateBtn'), $('locateStatus')));
+$('followBtn').addEventListener('click', async () => {
+  const btn = $('followBtn');
+  const on = btn.getAttribute('aria-pressed') !== 'true';
+  btn.disabled = true;
+  try {
+    await fetch(`/api/follow?id=${btn.dataset.id}&on=${on ? 1 : 0}`, { method: 'POST' });
+    await poll();
+  } finally {
+    btn.disabled = false;
+  }
+});
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#followed') { showBoard(); return; }
+  const id = readSelection();
+  if (id !== null) select(id);
+});
+selectedId = readSelection();
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

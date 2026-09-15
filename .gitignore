@@ -1,0 +1,5 @@
+# Journal, dumps and backups: they hold your colony, player names and paths.
+data/
+run-local.sh
+__pycache__/
+*.pyc
