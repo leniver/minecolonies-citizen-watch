@@ -9,19 +9,20 @@ Citizen watch is not made by or affiliated with the MineColonies team.
 ## What it shows
 
 - **Citizen page:** the last 10 meals with back-to-back repeats highlighted, current AI state and job state, health, position, hunger bar with the point where a citizen goes to eat, and a timeline of every change (state, food history, saturation, joining or leaving the colony).
-- **Followed citizens:** a board of cards for every citizen you follow, updated live, with state, hunger, meals and the latest change. Followed citizens keep being read even when the page is closed.
+- **Followed citizens** (**View › Followed citizens**): a board of cards for every citizen you follow (**Citizen › Following**), updated live, with state, hunger, meals and the latest change. Followed citizens keep being read even when the page is closed.
 - **Complaints and requests:** what each citizen would say when a player talks to them (complaints, notices, requests, quest offers), in English, with its priority and whether it is showing or was answered and comes back later. They are read from the colony save, see below.
 - **Colony:** the number of citizens and a collapsible list of recent arrivals and departures.
+- **Window:** a menu bar across the top, the citizen list and the page scrolling side by side, and a status bar at the bottom with the result of the last action, the colony and the server connection. Pointing at a menu item shows what it does in the status bar.
 - **Journal:** everything the panel learns is appended to `data/journal.jsonl` and loaded again on start, so a restart or a closed tab loses nothing.
 
 ## What it changes in game
 
-Reading is passive. Only these buttons change anything:
+Reading is passive. Only these actions change anything. They sit in the menu bar across the top of the window, grouped by domain; actions for one citizen apply to the citizen whose page is open:
 
-- **Make hungry** and **Make everyone hungry** set saturation to 2, just under the point where a citizen goes to eat, so you can trigger a meal on demand.
-- **Clear food history** and **Clear everyone's food history** empty the in-game food history, as if the citizens had never eaten. They need a MineColonies build with the `/mc citizens modify <colony> <citizen> foodHistory clear` subcommand, which no official release has yet; the panel says so when the server lacks it.
-- **Save now** runs `save-all` on the server, so the colony save is written right away instead of at the next autosave. On a large world this can cause a short pause in game.
-- **Locate** outlines a citizen with the glowing effect for a chosen number of real seconds (30 by default), like the tracking in the MineColonies colony map. Every player on the server sees the outline.
+- **Food › Make hungry** and **Food › Make everyone hungry** set saturation to 2, just under the point where a citizen goes to eat, so you can trigger a meal on demand.
+- **Food › Clear food history** and **Food › Clear everyone's food history** empty the in-game food history, as if the citizens had never eaten. They need a MineColonies build with the `/mc citizens modify <colony> <citizen> foodHistory clear` subcommand, which no official release has yet; the panel says so when the server lacks it.
+- **World › Save now** runs `save-all` on the server, so the colony save is written right away instead of at the next autosave. On a large world this can cause a short pause in game.
+- **Citizen › Locate in game**, or **Locate** on a followed citizen's card, outlines a citizen with the glowing effect for a chosen number of real seconds (30 by default), like the tracking in the MineColonies colony map. Every player on the server sees the outline.
 
 ## Requirements
 
@@ -61,18 +62,19 @@ Then open http://127.0.0.1:8765.
 | `--world-dir` | World folder holding the colony save, read after every autosave. Defaults to the server's `level-name` folder when it exists. |
 | `--game-dir` | Game client folder. Its `logs/latest.log` is followed for `/mc citizens info` output you type in chat, and its older logs are imported once when the journal is created. |
 | `--port` | Port for the page, 8765 by default. |
-| `--follow` | Citizen IDs to read for this run, for example `15,43`. The **Keep following** button on a citizen page is remembered instead. |
+| `--follow` | Citizen IDs to read for this run, for example `15,43`. **Citizen › Following** is remembered instead. |
 | `--journal` | Where the journal is kept, `data/journal.jsonl` by default. Delete it to start from scratch. |
 
 At least one of `--server-dir`, `--world-dir` or `--game-dir` is required.
 
 ## Settings
 
-The **Settings** button next to the title sets:
+**Panel › Settings…** sets:
 
 - **Read from the server every:** from 1 to 600 game ticks. The panel reads the server's tick rate, so the interval stays in step with the game when you change `/tick rate`.
 - **Locate makes a citizen glow for:** 10 seconds to 5 minutes of real time, whatever the tick rate.
-- **Clear history:** starts fresh by forgetting every timeline, meal history and former citizen. Settings and followed citizens are kept, and the old journal is renamed to `data/journal-archive-<date>-<time>.jsonl` rather than deleted.
+
+**Panel › Clear panel history…** starts fresh by forgetting every timeline, meal history and former citizen. Settings and followed citizens are kept, and the old journal is renamed to `data/journal-archive-<date>-<time>.jsonl` rather than deleted.
 
 ## Load on the server
 
@@ -85,7 +87,7 @@ Each followed citizen costs two RCON commands per read, and the full citizen lis
 - The citizen list is read page by page, so a list read while citizens join or leave, or garbled as above, can miss people. The panel only uses a list that matches the colony's own count, and only counts a citizen as gone after two readings without them. It cannot tell a death from a dismissal.
 - MineColonies gives a new citizen the lowest free ID, so an ID can belong to several citizens over time. The panel archives a citizen when they leave and starts a new record for whoever takes their ID; former citizens stay listed with their history. A name change seen within a minute of the previous citizen list counts as a rename, so a citizen who leaves and is replaced faster than that would be taken for a rename.
 - Locate needs the citizen to be loaded, which means a player nearby.
-- Complaints, requests and their answers are only stored in the colony save, and no command lists them live. The panel shows them as of the last save, so press **Save now** on a citizen page to see the latest status. The server saves by itself every 5 minutes of real time, whatever the tick rate, but only if it keeps up with that rate: on a test server pushed to a high `/tick rate` the colony save arrived up to 11 minutes apart. An **Okay** answer only hides a complaint for 5 in-game minutes, so without **Save now** it is often over before the panel sees it.
+- Complaints, requests and their answers are only stored in the colony save, and no command lists them live. The panel shows them as of the last save, so use **World › Save now** to see the latest status. The server saves by itself every 5 minutes of real time, whatever the tick rate, but only if it keeps up with that rate: on a test server pushed to a high `/tick rate` the colony save arrived up to 11 minutes apart. An **Okay** answer only hides a complaint for 5 in-game minutes, so without **Save now** it is often over before the panel sees it.
 - Meals, hunger and inventory from the save have the same delay; the live readings over RCON do not.
 
 ## License

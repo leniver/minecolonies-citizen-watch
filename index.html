@@ -42,7 +42,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { height: 100%; margin: 0; }
 body {
   background: var(--ground);
   color: var(--ink);
@@ -52,10 +52,12 @@ body {
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 [hidden] { display: none !important; }
 
+/* window: title bar with menus, two panes that scroll on their own, status bar */
+.window { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh; }
 .app {
   display: grid;
-  grid-template-columns: 270px 1fr;
-  min-height: 100vh;
+  grid-template-columns: 270px minmax(0, 1fr);
+  min-height: 0;
 }
 
 /* roster */
@@ -64,17 +66,39 @@ body {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  max-height: 100vh;
-  position: sticky;
-  top: 0;
+  min-height: 0;
 }
-.roster-head { padding: 20px 18px 12px; }
-.brand-row { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
-.brand { font-size: 1.35rem; font-weight: 700; margin: 0; letter-spacing: .01em; }
-.settings-btn { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-soft); cursor: pointer; font: inherit; font-size: .9rem; padding: 2px 10px; }
-.settings-btn:hover { color: var(--ink); }
+.roster-head { padding: 12px 12px 8px; }
 
-.arrivals-box { margin: 0 0 10px; }
+/* title bar and menus, drawn like a desktop application's */
+.titlebar { align-items: stretch; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; min-height: 34px; padding: 0 6px; }
+.app-name { align-self: center; font-weight: 700; letter-spacing: .01em; padding: 0 14px 0 8px; }
+.menubar { align-items: stretch; display: flex; flex-wrap: wrap; }
+.menu { display: flex; position: relative; }
+.menu-trigger { background: none; border: 0; color: var(--ink); cursor: default; font: inherit; padding: 0 12px; }
+.menu-trigger:hover, .menu-trigger[aria-expanded="true"] { background: var(--slot); }
+.menu-list { background: var(--panel); border: 1px solid var(--line); border-radius: 0 0 6px 6px; box-shadow: 0 10px 24px rgba(0, 0, 0, .3); display: grid; left: 0; max-width: calc(100vw - 32px); min-width: min(17rem, calc(100vw - 32px)); padding: 4px 0; position: absolute; top: 100%; z-index: 5; }
+.menu-list [role^="menuitem"] { align-items: center; background: none; border: 0; color: var(--ink); cursor: default; display: grid; font: inherit; gap: 0 4px; grid-template-columns: 22px minmax(0, 1fr) auto; padding: 4px 18px 4px 6px; text-align: left; white-space: nowrap; }
+.menu-list [role^="menuitem"]:hover, .menu-list [role^="menuitem"]:focus-visible { background: var(--slot); outline: none; }
+.menu-list [role^="menuitem"][aria-disabled="true"] { color: var(--ink-soft); opacity: .6; }
+.menu-list .check { color: var(--emerald); text-align: center; }
+.menu-list [aria-checked="true"] .check::before { content: "\2713"; }
+.menu-list .shortcut { color: var(--ink-soft); font: inherit; font-size: .88rem; }
+.menu-sep { border-top: 1px solid var(--line); margin: 4px 0; }
+
+.badge { border: 1px solid currentColor; border-radius: 999px; font-size: .9rem; font-weight: 600; padding: 1px 10px; }
+.badge.is-following { color: var(--emerald); }
+.badge.is-glowing { color: var(--honey); }
+
+.statusbar { background: var(--panel); border-top: 1px solid var(--line); color: var(--ink-soft); display: grid; font-size: .9rem; grid-template-columns: minmax(0, 1fr) auto auto; min-height: 26px; }
+.status-cell { align-items: center; display: flex; overflow: hidden; padding: 2px 12px; text-overflow: ellipsis; white-space: nowrap; }
+.status-cell + .status-cell { border-left: 1px solid var(--line); }
+.status-message.is-help { color: var(--ink-soft); font-style: italic; }
+.status-message.is-result { color: var(--ink); }
+.status-message.is-error { color: var(--brick); font-weight: 600; }
+.status-cell.live.is-live::before { background: var(--emerald); border-radius: 50%; content: ""; display: inline-block; height: 8px; margin-right: 7px; width: 8px; }
+
+.arrivals-box { margin: 8px 0 0; }
 .arrivals-box summary { align-items: baseline; border-radius: 4px; color: var(--ink-soft); cursor: pointer; display: grid; font-size: .92rem; gap: 6px; grid-template-columns: auto minmax(0, 1fr) auto; list-style: none; padding: 2px 0; }
 .arrivals-box summary::-webkit-details-marker { display: none; }
 .arrivals-box summary::before { content: "\25B8"; display: inline-block; transition: transform .15s ease; }
@@ -85,22 +109,12 @@ body {
 .arrivals-box .arrivals { margin: 4px 0 0; }
 
 dialog.settings { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); max-width: calc(100vw - 32px); padding: 0; width: 440px; }
-.danger-zone { border-top: 1px solid var(--line); display: grid; gap: 8px; justify-items: start; padding-top: 14px; }
-.danger-zone h3 { margin: 0; }
-.danger-zone p { color: var(--ink-soft); font-size: .92rem; margin: 0; }
-.danger-zone p.is-error { color: var(--brick); }
-.danger { background: none; border: 1px solid var(--brick); border-radius: 6px; color: var(--brick); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
-.danger:hover { background: color-mix(in srgb, var(--brick) 12%, transparent); }
-.danger:disabled { cursor: default; opacity: .55; }
 dialog.settings::backdrop { background: rgba(0, 0, 0, .45); }
 .settings form { display: grid; gap: 16px; padding: 18px 20px 16px; }
 .settings h2 { font-size: 1.35rem; font-weight: 700; margin: 0; }
 .settings .dialog-actions { display: flex; justify-content: flex-end; }
 .settings .dialog-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 16px; }
 @media (prefers-reduced-motion: reduce) { .arrivals-box summary::before { transition: none; } .arrivals-box summary.is-fresh { animation: none; } }
-.colony { color: var(--ink-soft); margin: 2px 0 4px; font-size: .95rem; }
-.live { color: var(--ink-soft); font-size: .95rem; margin: 0 0 12px; }
-.live.is-live::before { background: var(--emerald); border-radius: 50%; content: ""; display: inline-block; height: 8px; margin-right: 7px; width: 8px; }
 .search {
   background: var(--ground);
   border: 1px solid var(--line);
@@ -110,7 +124,7 @@ dialog.settings::backdrop { background: rgba(0, 0, 0, .45); }
   padding: 8px 10px;
   width: 100%;
 }
-.list { list-style: none; margin: 0; overflow-y: auto; padding: 4px 8px 16px; }
+.list { flex: 1; list-style: none; margin: 0; min-height: 0; overflow-y: auto; padding: 4px 8px 16px; }
 .list button {
   align-items: baseline;
   background: none;
@@ -148,19 +162,16 @@ dialog.settings::backdrop { background: rgba(0, 0, 0, .45); }
 @media (prefers-reduced-motion: reduce) { .arrivals li.is-fresh { animation: none; } }
 
 /* detail */
-main { padding: 28px clamp(18px, 4vw, 48px) 48px; max-width: 1120px; }
+main { min-height: 0; overflow-y: auto; padding: 24px clamp(18px, 4vw, 44px) 40px; }
+main > * { max-width: 1060px; }
 .empty-state { color: var(--ink-soft); font-size: 1.15rem; margin-top: 18vh; text-align: center; }
 
 .who-top { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .who h2 { font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 700; line-height: 1.05; margin: 0; }
-.follow { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
-.locate { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
-.locate.is-glowing, .card-actions button.is-glowing { border-color: var(--honey); color: var(--honey); }
-.locate:disabled, .card-actions button:disabled { cursor: default; }
+.card-actions button.is-glowing { border-color: var(--honey); color: var(--honey); }
+.card-actions button:disabled { cursor: default; }
 .former-note { background: color-mix(in srgb, var(--ink-soft) 14%, transparent); border-left: 3px solid var(--ink-soft); margin: 12px 0 0; padding: 8px 12px; }
-.locate-status { color: var(--ink-soft); font-size: .95rem; margin: 6px 0 0; }
-.locate-status.is-error { color: var(--brick); }
-.follow[aria-pressed="true"] { background: none; border-color: var(--emerald); color: var(--emerald); }
+
 .follow-note { color: var(--ink-soft); font-size: .95rem; margin: 6px 0 0; }
 .who .sub { color: var(--ink-soft); font-size: 1.1rem; margin: 4px 0 0; }
 .freshness { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 0; color: var(--ink-soft); }
@@ -240,19 +251,6 @@ section { margin-top: 34px; }
 .meter .fill.is-eating { background: var(--brick); }
 .meter .eat-line { background: var(--ink); height: 100%; left: calc(2.5 / 60 * 100%); position: absolute; top: 0; width: 2px; }
 .meter-scale { color: var(--ink-soft); display: flex; font-size: .9rem; justify-content: space-between; }
-.hunger-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 14px; }
-.hunger-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
-.hunger-actions button:disabled { cursor: default; opacity: .55; }
-.hunger-actions p { color: var(--ink-soft); flex: 1 1 14rem; margin: 0; }
-.hunger-actions p.is-error { color: var(--brick); }
-.roster-actions { margin: 0 0 12px; }
-.roster-actions button + p + button { margin-top: 8px; }
-.roster-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 12px; width: 100%; }
-.roster-actions button:disabled { cursor: default; opacity: .55; }
-.roster-actions p { color: var(--ink-soft); font-size: .9rem; margin: 6px 0 0; }
-.roster-actions p.is-error { color: var(--brick); }
-.board-link { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; margin: 0 0 12px; padding: 6px 12px; text-align: left; width: 100%; }
-.board-link[aria-current="page"] { border-color: var(--emerald); box-shadow: inset 3px 0 0 var(--emerald); }
 
 /* followed board */
 .board-head h2 { font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 700; line-height: 1.05; margin: 0; }
@@ -328,8 +326,11 @@ section { margin-top: 34px; }
 .problem { background: color-mix(in srgb, var(--brick) 18%, transparent); border-left: 3px solid var(--brick); margin: 14px 0 0; padding: 8px 12px; }
 
 @media (max-width: 900px) {
+  /* a phone gets an ordinary scrolling page instead of fixed panes */
+  .window { display: block; height: auto; }
   .app { grid-template-columns: 1fr; }
-  .roster { max-height: none; position: static; }
+  main { overflow: visible; }
+  .statusbar { bottom: 0; position: sticky; }
   .list { max-height: 40vh; }
   .pair { grid-template-columns: 1fr; gap: 0; }
   .strip { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -342,27 +343,58 @@ section { margin-top: 34px; }
 </style>
 </head>
 <body>
+<div class="window">
+    <header class="titlebar">
+      <span class="app-name">Citizen watch</span>
+      <nav class="menubar" role="menubar" aria-label="Main menu">
+        <div class="menu">
+          <button type="button" class="menu-trigger" role="menuitem" aria-haspopup="menu" aria-expanded="false">Food</button>
+          <div class="menu-list" role="menu" aria-label="Food" hidden>
+            <button type="button" role="menuitem" data-action="citizen-hungry"><span class="check" aria-hidden="true"></span><span class="label">Make hungry</span><kbd class="shortcut"></kbd></button>
+            <button type="button" role="menuitem" data-action="hungry-all"><span class="check" aria-hidden="true"></span><span class="label">Make everyone hungry…</span><kbd class="shortcut"></kbd></button>
+            <div class="menu-sep" role="separator"></div>
+            <button type="button" role="menuitem" data-action="citizen-clear-food"><span class="check" aria-hidden="true"></span><span class="label">Clear food history…</span><kbd class="shortcut"></kbd></button>
+            <button type="button" role="menuitem" data-action="clear-food-all"><span class="check" aria-hidden="true"></span><span class="label">Clear everyone's food history…</span><kbd class="shortcut"></kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button" class="menu-trigger" role="menuitem" aria-haspopup="menu" aria-expanded="false">World</button>
+          <div class="menu-list" role="menu" aria-label="World" hidden>
+            <button type="button" role="menuitem" data-action="save"><span class="check" aria-hidden="true"></span><span class="label">Save now</span><kbd class="shortcut"></kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button" class="menu-trigger" role="menuitem" aria-haspopup="menu" aria-expanded="false">Citizen</button>
+          <div class="menu-list" role="menu" aria-label="Citizen" hidden>
+            <button type="button" role="menuitemcheckbox" data-action="citizen-follow" aria-checked="false"><span class="check" aria-hidden="true"></span><span class="label">Following</span><kbd class="shortcut"></kbd></button>
+            <button type="button" role="menuitem" data-action="citizen-locate"><span class="check" aria-hidden="true"></span><span class="label">Locate in game</span><kbd class="shortcut"></kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button" class="menu-trigger" role="menuitem" aria-haspopup="menu" aria-expanded="false">View</button>
+          <div class="menu-list" role="menu" aria-label="View" hidden>
+            <button type="button" role="menuitem" data-action="show-board"><span class="check" aria-hidden="true"></span><span class="label">Followed citizens</span><kbd class="shortcut"></kbd></button>
+            <button type="button" role="menuitem" data-action="show-arrivals"><span class="check" aria-hidden="true"></span><span class="label">Recent arrivals and departures</span><kbd class="shortcut"></kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button type="button" class="menu-trigger" role="menuitem" aria-haspopup="menu" aria-expanded="false">Panel</button>
+          <div class="menu-list" role="menu" aria-label="Panel" hidden>
+            <button type="button" role="menuitem" data-action="settings"><span class="check" aria-hidden="true"></span><span class="label">Settings…</span><kbd class="shortcut"></kbd></button>
+            <div class="menu-sep" role="separator"></div>
+            <button type="button" role="menuitem" data-action="clear-panel-history"><span class="check" aria-hidden="true"></span><span class="label">Clear panel history…</span><kbd class="shortcut"></kbd></button>
+          </div>
+        </div>
+      </nav>
+    </header>
 <div class="app">
   <aside class="roster">
     <div class="roster-head">
-      <div class="brand-row">
-        <h1 class="brand">Citizen watch</h1>
-        <button type="button" class="settings-btn" id="settingsBtn" aria-haspopup="dialog">Settings</button>
-      </div>
-      <p class="colony" id="colony">Waiting for the colony save</p>
+      <input class="search" id="search" type="search" placeholder="Find by name or ID" aria-label="Find a citizen">
       <details class="arrivals-box" id="arrivalsBox" hidden>
         <summary id="arrivalsSummary"><span class="summary-text" id="arrivalsSummaryText"></span><time id="arrivalsSummaryAgo"></time></summary>
         <ul class="arrivals" id="arrivals" aria-label="Recent arrivals and departures"></ul>
       </details>
-      <p class="live" id="liveStatus"></p>
-      <button type="button" class="board-link" id="boardBtn">Followed citizens</button>
-      <div class="roster-actions">
-        <button type="button" id="hungryAllBtn">Make everyone hungry</button>
-        <p id="hungryAllStatus" role="status" hidden></p>
-        <button type="button" id="clearFoodAllBtn">Clear everyone's food history</button>
-        <p id="clearFoodAllStatus" role="status" hidden></p>
-      </div>
-      <input class="search" id="search" type="search" placeholder="Find by name or ID" aria-label="Find a citizen">
     </div>
     <ul class="list" id="list" role="listbox" aria-label="Citizens"></ul>
   </aside>
@@ -382,13 +414,13 @@ section { margin-top: 34px; }
       <header class="who">
         <div class="who-top">
           <h2 id="name"></h2>
-          <button class="follow" id="followBtn" type="button" aria-pressed="false">Keep following</button>
-          <button class="locate" id="locateBtn" type="button" title="Outline this citizen in game for 30 seconds">Locate</button>
+          <span class="badge is-following" id="followBadge" hidden>Following</span>
+          <span class="badge is-glowing" id="glowBadge" hidden></span>
         </div>
         <p class="sub" id="sub"></p>
-        <p class="locate-status" id="locateStatus" role="status" hidden></p>
+
         <p class="former-note" id="formerNote" hidden></p>
-        <p class="follow-note" id="followNote" hidden>Read from the server at the interval set in the sidebar, even with this page closed. Everything is kept in the journal.</p>
+        <p class="follow-note" id="followNote" hidden>Read from the server at the interval set in Panel › Settings, even with this page closed. Everything is kept in the journal.</p>
         <p class="freshness"><span id="logFresh"></span><span id="saveFresh"></span></p>
         <div id="problems"></div>
       </header>
@@ -399,10 +431,6 @@ section { margin-top: 34px; }
         <div class="strip" id="strip"></div>
         <div class="strip-ends"><span>Oldest</span><span>Newest</span></div>
         <p class="meal-stats" id="mealStats"></p>
-        <div class="hunger-actions" id="mealActions">
-          <button type="button" id="clearFoodBtn">Clear food history</button>
-          <p id="clearFoodStatus" role="status">Empties their in-game food history, as if they had never eaten.</p>
-        </div>
       </section>
 
       <div class="pair">
@@ -420,10 +448,6 @@ section { margin-top: 34px; }
           <p class="sat-value" id="satValue"></p>
           <div class="meter" role="img" id="meter"><div class="fill" id="satFill"></div><div class="eat-line"></div></div>
           <div class="meter-scale"><span>Goes to eat at 2.5</span><span>Full at 60</span></div>
-          <div class="hunger-actions" id="hungerActions">
-            <button type="button" id="hungryBtn">Make hungry</button>
-            <p id="hungryStatus" role="status"></p>
-          </div>
         </section>
       </div>
 
@@ -431,10 +455,6 @@ section { margin-top: 34px; }
         <h3 id="complaintsTitle">Complaints and requests</h3>
         <p class="note" id="complaintsSource"></p>
         <ul class="interactions" id="interactions"></ul>
-        <div class="hunger-actions" id="saveActions">
-          <button type="button" id="saveNowBtn">Save now</button>
-          <p id="saveNowStatus" role="status">Complaints and answers only reach the panel when the world saves. Saves the world now instead of waiting for the next autosave.</p>
-        </div>
       </section>
 
       <section aria-labelledby="eventsTitle">
@@ -450,6 +470,12 @@ section { margin-top: 34px; }
       </section>
     </div>
   </main>
+</div>
+  <footer class="statusbar">
+    <span class="status-cell status-message" id="statusMessage" role="status" aria-live="polite"></span>
+    <span class="status-cell" id="colony">Waiting for the colony save</span>
+    <span class="status-cell live" id="liveStatus"></span>
+  </footer>
 </div>
 
 <dialog class="settings" id="settings" aria-labelledby="settingsTitle">
@@ -467,12 +493,6 @@ section { margin-top: 34px; }
         <button type="button" class="info-btn" aria-label="About the glow duration" aria-describedby="glowInfo"><svg viewBox="0 0 416.979 416.979" aria-hidden="true" focusable="false"><path d="M356.004,61.156c-81.37-81.47-213.377-81.551-294.848-0.182c-81.47,81.371-81.552,213.379-0.181,294.85c81.369,81.47,213.378,81.551,294.849,0.181C437.293,274.636,437.375,142.626,356.004,61.156z M237.6,340.786c0,3.217-2.607,5.822-5.822,5.822h-46.576c-3.215,0-5.822-2.605-5.822-5.822V167.885c0-3.217,2.607-5.822,5.822-5.822h46.576c3.215,0,5.822,2.604,5.822,5.822V340.786z M208.49,137.901c-18.618,0-33.766-15.146-33.766-33.765c0-18.617,15.147-33.766,33.766-33.766c18.619,0,33.766,15.148,33.766,33.766C242.256,122.755,227.107,137.901,208.49,137.901z"/></svg></button>
         <span class="info-tip" role="tooltip" id="glowInfo">Real time. The panel adjusts it for the server's tick rate.</span>
       </span>
-    </div>
-    <div class="danger-zone">
-      <h3>Panel history</h3>
-      <p>Clears every timeline, meal history, arrival and former citizen the panel has recorded, to start fresh. Settings and followed citizens are kept. The old journal is kept as a file in the panel's data folder.</p>
-      <button type="button" class="danger" id="clearHistoryBtn">Clear history</button>
-      <p id="clearHistoryStatus" role="status"></p>
     </div>
     <div class="dialog-actions"><button type="submit">Done</button></div>
   </form>
@@ -747,8 +767,8 @@ function shortFood(name) {
 
 const glowUntil = new Map(); // citizen id -> time the in-game outline ends, so every Locate button for them shows it
 
-async function locate(id, button, statusEl) {
-  button.disabled = true;
+async function locate(id, button) {
+  if (button) button.disabled = true;
   let body;
   try {
     const res = await fetch(`/api/locate?id=${id}`, { method: 'POST' });
@@ -757,16 +777,14 @@ async function locate(id, button, statusEl) {
     body = { ok: false, message: 'The panel server did not answer.' };
   }
   if (body.ok) glowUntil.set(id, Date.now() + body.seconds * 1000);
-  if (statusEl) {
-    statusEl.hidden = false;
-    statusEl.textContent = body.ok ? `${body.message} Look for the outline in game.` : body.message;
-    statusEl.className = 'locate-status' + (body.ok ? '' : ' is-error');
+  if (!button) {
+    showStatus(body.ok ? `${body.message} Look for the outline in game.` : body.message, body.ok);
   } else if (!body.ok) {
     button.title = body.message;
     button.textContent = 'Not loaded';
     setTimeout(() => { button.textContent = 'Locate'; }, 3000);
   }
-  button.disabled = false;
+  if (button) button.disabled = false;
   renderGlow();
 }
 
@@ -783,6 +801,12 @@ function renderGlow() {
       button.classList.remove('is-glowing');
     }
   });
+  // The open citizen's page shows the same countdown as a badge next to their name.
+  const badge = $('glowBadge');
+  const until = selectedId !== null && !isFormerKey(selectedId) ? glowUntil.get(Number(selectedId)) : null;
+  const left = until ? Math.ceil((until - Date.now()) / 1000) : 0;
+  badge.hidden = left <= 0;
+  if (left > 0) badge.textContent = `Glowing ${left} s`;
 }
 setInterval(renderGlow, 500);
 
@@ -803,7 +827,7 @@ function buildCard(id) {
   sat.append(refs.satText, refs.satAgo);
   const actions = el('div', { class: 'card-actions' });
   const locateBtn = el('button', { type: 'button', title: 'Outline this citizen in game for 30 seconds', 'data-locate-id': String(id) }, 'Locate');
-  locateBtn.addEventListener('click', () => locate(id, locateBtn, null));
+  locateBtn.addEventListener('click', () => locate(id, locateBtn));
   actions.append(locateBtn);
   const stop = el('button', { type: 'button' }, 'Stop following');
   stop.addEventListener('click', async () => {
@@ -871,14 +895,13 @@ function updateCard(card, c) {
 
 function renderBoard(data) {
   $('board').hidden = !boardMode;
-  $('boardBtn').setAttribute('aria-current', boardMode ? 'page' : 'false');
   const list = data.followed || [];
-  $('boardBtn').textContent = `Followed citizens (${list.length})`;
+  setMenuItem('show-board', { label: `Followed citizens (${list.length})`, hint: boardMode ? 'Showing now' : 'Cards for every citizen you follow' });
   if (!boardMode) return;
   const m = data.meta;
   $('boardSub').textContent = list.length
     ? `${list.length} followed, read from the server every ${ticksText(m.poll_ticks)} (${realTime(m.poll_interval)}) even with this page closed.`
-    : 'Nobody is followed yet. Open a citizen from the list and press Keep following.';
+    : 'Nobody is followed yet. Open a citizen from the list and choose Citizen › Following.';
   const cards = $('cards');
   const keep = new Set();
   for (const c of list) {
@@ -895,12 +918,14 @@ function renderBoard(data) {
 
 function renderDetail(data) {
   if (boardMode) {
+    currentCitizen = null;
     $('empty').hidden = true;
     $('view').hidden = true;
     return;
   }
   const c = data.selected;
   const meta = data.meta;
+  currentCitizen = null;
   $('empty').hidden = !!c;
   $('view').hidden = !c;
   if (!c) return;
@@ -910,44 +935,16 @@ function renderDetail(data) {
   $('name').textContent = c.name;
   const isFormer = Boolean(c.left_t);
   // A former citizen's ID now belongs to someone else, so nothing on the page may act on it.
-  for (const id of ['followBtn', 'locateBtn', 'hungerActions', 'mealActions', 'saveActions', 'cmdSection']) $(id).hidden = isFormer;
-  const saveNowBtn = $('saveNowBtn');
-  if (!saveNowBtn.dataset.busy) saveNowBtn.disabled = meta.rcon_status !== 'connected';
+  $('cmdSection').hidden = isFormer;
   $('formerNote').hidden = !isFormer;
   if (isFormer) {
     $('formerNote').textContent = `Left the colony ${ago(c.left_t, data.now)} (${clock(c.left_t)}). MineColonies gives ID ${c.id} to the next new citizen, so this is their saved history only.`;
-    $('locateStatus').hidden = true;
   }
   const followed = !isFormer && (meta.following || []).includes(c.id);
-  const followBtn = $('followBtn');
-  followBtn.setAttribute('aria-pressed', String(followed));
-  followBtn.textContent = followed ? 'Stop following' : 'Keep following';
-  followBtn.dataset.id = String(c.id);
+  $('followBadge').hidden = !followed;
+  if (!isFormer) currentCitizen = { id: c.id, name: c.name, followed };
   $('followNote').hidden = !followed;
-  const locateBtn = $('locateBtn');
-  if (locateBtn.dataset.locateId !== String(c.id)) {
-    locateBtn.dataset.locateId = String(c.id);
-    $('locateStatus').hidden = true;
-    renderGlow();
-  }
-  const hungryBtn = $('hungryBtn');
-  const operator = (meta.operators_online || [])[0];
-  const hint = meta.rcon_status !== 'connected' ? 'Needs the local server running.'
-    : (operator ? `Sets saturation to 2 as ${operator}, just under where they go to eat.` : 'Needs an operator connected in Creative.');
-  if (hungryBtn.dataset.id !== String(c.id) || hungryBtn.dataset.hint !== hint) {
-    $('hungryStatus').textContent = hint;
-    $('hungryStatus').className = '';
-  }
-  hungryBtn.dataset.id = String(c.id);
-  const clearFoodBtn = $('clearFoodBtn');
-  if (clearFoodBtn.dataset.id !== String(c.id)) {
-    $('clearFoodStatus').textContent = 'Empties their in-game food history, as if they had never eaten.';
-    $('clearFoodStatus').className = '';
-  }
-  clearFoodBtn.dataset.id = String(c.id);
-  if (!clearFoodBtn.dataset.busy) clearFoodBtn.disabled = meta.rcon_status !== 'connected' || !operator;
-  hungryBtn.dataset.hint = hint;
-  if (!hungryBtn.dataset.busy) hungryBtn.disabled = meta.rcon_status !== 'connected' || !operator;
+  renderGlow();
   const job = log.job || save.job;
   $('sub').textContent = `#${c.id}${job ? `, ${job}` : ''}`;
 
@@ -1081,57 +1078,25 @@ async function poll() {
     renderInterval(data.meta);
     renderGlowSetting(data.meta);
     const rs = data.meta.rcon_status; const live = $('liveStatus');
-    live.className = 'live' + (rs === 'connected' ? ' is-live' : '');
+    live.className = 'status-cell live' + (rs === 'connected' ? ' is-live' : '');
     const ops = data.meta.operators_online || [];
     live.textContent = rs === 'connected' ? `Live from the local server, ${ops.length ? `${ops.join(', ')} online` : 'no operator online'}` : (rs === 'offline' ? 'Local server offline, using log and save' : (rs === 'disabled' ? 'Using log and save' : `Server: ${rs}`));
     window.__rconLive = rs === 'connected';
-    for (const allBtn of [$('hungryAllBtn'), $('clearFoodAllBtn')]) {
-      if (!allBtn.dataset.busy) allBtn.disabled = rs !== 'connected' || !ops.length;
-      allBtn.title = rs !== 'connected' ? 'Needs the local server running.' : (ops.length ? `Runs as ${ops[0]}` : 'Needs an operator connected in Creative.');
-    }
     if (selectedId === null && data.citizens.length) { /* keep the empty state until someone is picked */ }
     renderList(data.citizens);
     renderBoard(data);
     renderDetail(data);
+    renderMenuStates(data.meta);
   } catch (err) {
     $('colony').textContent = 'The panel server stopped. Start panel.py again.';
   }
 }
 
 $('search').addEventListener('input', () => renderList(citizensCache));
-$('boardBtn').addEventListener('click', showBoard);
-$('settingsBtn').addEventListener('click', () => $('settings').showModal());
 try { $('arrivalsBox').open = localStorage.getItem('citizen-watch-arrivals-open') === '1'; } catch (e) {}
 $('arrivalsBox').addEventListener('toggle', () => {
   try { localStorage.setItem('citizen-watch-arrivals-open', $('arrivalsBox').open ? '1' : '0'); } catch (e) {}
   poll();
-});
-$('clearHistoryBtn').addEventListener('click', async () => {
-  if (!window.confirm('Clear the whole panel history? Every timeline, meal history and former citizen is removed. Settings and followed citizens are kept.')) return;
-  const btn = $('clearHistoryBtn');
-  const status = $('clearHistoryStatus');
-  btn.disabled = true;
-  status.className = '';
-  status.textContent = 'Clearing';
-  try {
-    const res = await fetch('/api/reset', { method: 'POST' });
-    const body = await res.json();
-    if (!body.ok) throw new Error(body.message);
-    // Forget what the page itself remembers about the old history too.
-    cardEls.forEach((card) => card.remove());
-    cardEls.clear();
-    seenRosterChanges.clear();
-    rosterChangesRendered = false;
-    lastStripItems = null;
-    lastStripFor = null;
-    status.textContent = `History cleared. The old journal was saved as data/${body.archive}.`;
-  } catch (err) {
-    status.className = 'is-error';
-    status.textContent = err.message || 'The panel server did not answer.';
-  } finally {
-    btn.disabled = false;
-    await poll();
-  }
 });
 $('glow').addEventListener('change', async () => {
   const select = $('glow');
@@ -1153,47 +1118,216 @@ $('interval').addEventListener('change', async () => {
     select.disabled = false;
   }
 });
-async function runServerAction(btn, status, url, question) {
+// ----- status bar: the result of the last action, like a desktop app
+
+// The left cell of the status bar shows the result of the last action, or the description of the menu item
+// under the mouse or keyboard focus, as desktop applications do.
+let statusTimer = null;
+let statusResult = null; // { message, ok } while a result is still worth showing
+function paintStatus(message, kind) {
+  const cell = $('statusMessage');
+  cell.textContent = message || '';
+  cell.className = 'status-cell status-message' + (kind ? ` is-${kind}` : '');
+  cell.title = message || '';
+}
+function showStatus(message, ok = true) {
+  statusResult = { message, ok };
+  paintStatus(message, ok ? 'result' : 'error');
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { statusResult = null; paintStatus(''); }, ok ? 8000 : 15000);
+}
+function showHelp(text) {
+  if (text) paintStatus(text, 'help');
+  else if (statusResult) paintStatus(statusResult.message, statusResult.ok ? 'result' : 'error');
+  else paintStatus('');
+}
+
+async function runServerAction(url, question, pending) {
   if (question && !window.confirm(question)) return;
-  btn.disabled = true;
-  btn.dataset.busy = '1';
-  status.hidden = false;
-  status.className = '';
-  status.textContent = 'Sending to the server';
+  showStatus(pending || 'Sending to the server');
   try {
     const res = await fetch(url, { method: 'POST' });
     const body = await res.json();
-    status.textContent = body.message;
-    status.className = body.ok ? '' : 'is-error';
+    showStatus(body.message, body.ok);
   } catch (err) {
-    status.textContent = 'The panel server did not answer.';
-    status.className = 'is-error';
+    showStatus('The panel server did not answer.', false);
   } finally {
-    delete btn.dataset.busy;
     await poll();
   }
 }
 
-$('hungryAllBtn').addEventListener('click', () => runServerAction($('hungryAllBtn'), $('hungryAllStatus'), '/api/hungry?all=1',
-  'Set every citizen\'s saturation to 2? They will all head off to eat at once.'));
-$('saveNowBtn').addEventListener('click', () => runServerAction($('saveNowBtn'), $('saveNowStatus'), '/api/save'));
-$('clearFoodAllBtn').addEventListener('click', () => runServerAction($('clearFoodAllBtn'), $('clearFoodAllStatus'), '/api/food-history/clear?all=1',
-  'Clear the food history of every citizen in the colony? Their meal records in game are emptied, as if they had never eaten.'));
-$('hungryBtn').addEventListener('click', () => runServerAction($('hungryBtn'), $('hungryStatus'), `/api/hungry?id=${$('hungryBtn').dataset.id}`));
-$('clearFoodBtn').addEventListener('click', () => runServerAction($('clearFoodBtn'), $('clearFoodStatus'), `/api/food-history/clear?id=${$('clearFoodBtn').dataset.id}`,
-  `Clear the food history of ${$('name').textContent}? Their meal records in game are emptied.`));
-$('locateBtn').addEventListener('click', () => locate(Number($('locateBtn').dataset.locateId), $('locateBtn'), $('locateStatus')));
-$('followBtn').addEventListener('click', async () => {
-  const btn = $('followBtn');
-  const on = btn.getAttribute('aria-pressed') !== 'true';
-  btn.disabled = true;
+async function clearPanelHistory() {
+  if (!window.confirm('Clear the whole panel history? Every timeline, meal history and former citizen is removed. Settings and followed citizens are kept.')) return;
+  showStatus('Clearing the panel history');
   try {
-    await fetch(`/api/follow?id=${btn.dataset.id}&on=${on ? 1 : 0}`, { method: 'POST' });
-    await poll();
+    const res = await fetch('/api/reset', { method: 'POST' });
+    const body = await res.json();
+    if (!body.ok) throw new Error(body.message);
+    // Forget what the page itself remembers about the old history too.
+    cardEls.forEach((card) => card.remove());
+    cardEls.clear();
+    seenRosterChanges.clear();
+    rosterChangesRendered = false;
+    lastStripItems = null;
+    lastStripFor = null;
+    showStatus(`Panel history cleared. The old journal was saved as data/${body.archive}.`);
+  } catch (err) {
+    showStatus(err.message || 'The panel server did not answer.', false);
   } finally {
-    btn.disabled = false;
+    await poll();
   }
+}
+
+const citizenId = () => currentCitizen && currentCitizen.id;
+const citizenName = () => currentCitizen && currentCitizen.name;
+
+async function toggleFollow() {
+  if (!currentCitizen) return;
+  const on = !currentCitizen.followed;
+  await fetch(`/api/follow?id=${currentCitizen.id}&on=${on ? 1 : 0}`, { method: 'POST' });
+  showStatus(on ? `Following ${currentCitizen.name}.` : `Stopped following ${currentCitizen.name}.`);
+  await poll();
+}
+
+const ACTIONS = {
+  'hungry-all': () => runServerAction('/api/hungry?all=1', 'Set every citizen\'s saturation to 2? They will all head off to eat at once.'),
+  'clear-food-all': () => runServerAction('/api/food-history/clear?all=1',
+    'Clear the food history of every citizen in the colony? Their meal records in game are emptied, as if they had never eaten.'),
+  save: () => runServerAction('/api/save', null, 'Saving the world'),
+  'show-board': () => showBoard(),
+  'show-arrivals': () => {
+    const box = $('arrivalsBox');
+    box.open = true;
+    box.querySelector('summary').focus();
+  },
+  settings: () => $('settings').showModal(),
+  'clear-panel-history': () => clearPanelHistory(),
+  'citizen-hungry': () => runServerAction(`/api/hungry?id=${citizenId()}`),
+  'citizen-clear-food': () => runServerAction(`/api/food-history/clear?id=${citizenId()}`,
+    `Clear the food history of ${citizenName()}? Their meal records in game are emptied.`),
+  'citizen-locate': () => locate(Number(citizenId()), null),
+  'citizen-follow': () => toggleFollow(),
+};
+
+function setMenuItem(action, { label, hint, disabled, checked } = {}) {
+  document.querySelectorAll(`[data-action="${action}"]`).forEach((item) => {
+    if (label !== undefined) item.querySelector('.label').textContent = label;
+    if (hint !== undefined) item.dataset.hint = hint || '';
+    if (disabled !== undefined) item.setAttribute('aria-disabled', String(Boolean(disabled)));
+    if (checked !== undefined) item.setAttribute('aria-checked', String(Boolean(checked)));
+  });
+}
+
+let currentCitizen = null; // the citizen whose page is open, when actions may target them
+
+function renderMenuStates(meta) {
+  const connected = meta.rcon_status === 'connected';
+  const operator = (meta.operators_online || [])[0];
+  const needsOperator = !connected ? 'Needs the local server running' : (operator ? null : 'Needs an operator connected in Creative');
+  const who = currentCitizen ? currentCitizen.name : null;
+  const needsCitizen = who ? null : 'Open a citizen first';
+  setMenuItem('hungry-all', { disabled: needsOperator, hint: needsOperator || `Sets every citizen's saturation to 2, as ${operator}` });
+  setMenuItem('clear-food-all', { disabled: needsOperator, hint: needsOperator || 'Empties every citizen\'s meal records in game' });
+  setMenuItem('save', { disabled: !connected, hint: connected ? 'Writes the world save now, so complaints and answers are up to date' : 'Needs the local server running' });
+  setMenuItem('citizen-hungry', { disabled: needsCitizen || needsOperator,
+    hint: needsCitizen || needsOperator || `Sets ${who}'s saturation to 2, just under where they go to eat, as ${operator}` });
+  setMenuItem('citizen-clear-food', { disabled: needsCitizen || needsOperator,
+    hint: needsCitizen || needsOperator || `Empties ${who}'s meal records, as if they had never eaten` });
+  const glow = meta.glow_seconds < 60 ? `${meta.glow_seconds} s` : `${meta.glow_seconds / 60} min`;
+  setMenuItem('citizen-locate', { disabled: needsCitizen || !connected,
+    hint: needsCitizen || (connected ? `Outlines ${who} in game for ${glow}` : 'Needs the local server running') });
+  setMenuItem('citizen-follow', { disabled: needsCitizen, checked: currentCitizen && currentCitizen.followed,
+    hint: needsCitizen || (currentCitizen.followed ? `Stop reading ${who} while their page is closed` : `Keep reading ${who} even while their page is closed`) });
+  setMenuItem('show-arrivals', { disabled: $('arrivalsBox').hidden, hint: $('arrivalsBox').hidden ? 'Nobody has joined or left yet' : 'Opens the list above the citizens' });
+  setMenuItem('settings', { hint: 'Read interval and glow duration' });
+  setMenuItem('clear-panel-history', { hint: 'Forgets timelines and former citizens; settings and followed citizens are kept' });
+}
+
+// ----- menu behaviour: click or keyboard, one menu open at a time
+
+let openMenu = null;
+
+function menuItems(menu) {
+  return [...menu.querySelectorAll('.menu-list [role="menuitem"], .menu-list [role="menuitemcheckbox"]')];
+}
+
+function closeMenu(focusTrigger = false) {
+  if (!openMenu) return;
+  showHelp(null);
+  const trigger = openMenu.querySelector('.menu-trigger');
+  openMenu.querySelector('.menu-list').hidden = true;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (focusTrigger) trigger.focus();
+  openMenu = null;
+}
+
+function openMenuOf(menu, focusFirst) {
+  closeMenu();
+  openMenu = menu;
+  const list = menu.querySelector('.menu-list');
+  list.hidden = false;
+  // Nudge the list back inside the window when it would spill over an edge, on narrow screens mostly.
+  list.style.left = '0px';
+  const box = list.getBoundingClientRect();
+  const margin = 16;
+  const width = document.documentElement.clientWidth; // the window without its scrollbar
+  const shift = box.right > width - margin ? width - margin - box.right : (box.left < margin ? margin - box.left : 0);
+  list.style.left = `${shift}px`;
+  menu.querySelector('.menu-trigger').setAttribute('aria-expanded', 'true');
+  if (focusFirst) (menuItems(menu).find((item) => item.getAttribute('aria-disabled') !== 'true') || menuItems(menu)[0]).focus();
+}
+
+function siblingMenu(menu, step) {
+  const menus = [...menu.closest('.menubar').querySelectorAll(':scope > .menu')];
+  return menus[(menus.indexOf(menu) + step + menus.length) % menus.length];
+}
+
+document.querySelectorAll('.menu').forEach((menu) => {
+  const trigger = menu.querySelector('.menu-trigger');
+  trigger.addEventListener('click', () => (openMenu === menu ? closeMenu() : openMenuOf(menu, false)));
+  trigger.addEventListener('mouseenter', () => { if (openMenu && openMenu !== menu) openMenuOf(menu, false); });
+  trigger.addEventListener('keydown', (event) => {
+    if (['ArrowDown', 'Enter', ' '].includes(event.key)) { event.preventDefault(); openMenuOf(menu, true); }
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      siblingMenu(menu, event.key === 'ArrowRight' ? 1 : -1).querySelector('.menu-trigger').focus();
+    }
+  });
+  menu.querySelector('.menu-list').addEventListener('keydown', (event) => {
+    const items = menuItems(menu);
+    const index = items.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      items[event.key === 'Home' ? 0 : items.length - 1].focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu(true);
+    } else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      openMenuOf(siblingMenu(menu, event.key === 'ArrowRight' ? 1 : -1), true);
+    } else if (event.key === 'Tab') {
+      closeMenu();
+    }
+  });
+  menuItems(menu).forEach((item) => {
+    item.addEventListener('mouseenter', () => showHelp(item.dataset.hint));
+    item.addEventListener('focus', () => showHelp(item.dataset.hint));
+    item.addEventListener('mouseleave', () => showHelp(null));
+  });
+  menuItems(menu).forEach((item) => item.addEventListener('click', () => {
+    if (item.getAttribute('aria-disabled') === 'true') return;
+    closeMenu(true);
+    ACTIONS[item.dataset.action]();
+  }));
 });
+
+document.addEventListener('click', (event) => {
+  if (openMenu && !openMenu.contains(event.target)) closeMenu();
+});
+
 window.addEventListener('hashchange', () => {
   if (location.hash === '#followed') { showBoard(); return; }
   const id = readSelection();
