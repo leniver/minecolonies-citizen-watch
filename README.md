@@ -18,6 +18,7 @@ Citizen watch is not made by or affiliated with the MineColonies team.
 Reading is passive. Only these buttons change anything:
 
 - **Make hungry** and **Make everyone hungry** set saturation to 2, just under the point where a citizen goes to eat, so you can trigger a meal on demand.
+- **Clear food history** and **Clear everyone's food history** empty the in-game food history, as if the citizens had never eaten. They need a MineColonies build with the `/mc citizens modify <colony> <citizen> foodHistory clear` subcommand, which no official release has yet; the panel says so when the server lacks it.
 - **Locate** outlines a citizen with the glowing effect for a chosen number of real seconds (30 by default), like the tracking in the MineColonies colony map. Every player on the server sees the outline.
 
 ## Requirements

@@ -416,64 +416,105 @@ def colony_citizens(client, colony):
     return members
 
 
-def make_hungry(cids=None):
-    """Set saturation just below the eating threshold for these citizens, or for all of them when cids is None.
-    Returns (ok, message)."""
+def modify_citizens(cids, argument):
+    """Run /mc citizens modify <colony> <citizen> <argument> for these citizens, or all of them when cids is None.
+
+    MineColonies only accepts the modify command from the server console or a player in Creative, so it runs as the
+    first connected operator who is in Creative. Returns (error, outcome): error is a message when nothing could be
+    sent, outcome holds the citizens asked, the operator used and each reply."""
     if not server_dir:
-        return False, 'The panel is not connected to a local server.'
+        return 'The panel is not connected to a local server.', None
     client = rcon_client(server_dir)
     if client is None:
-        return False, 'RCON is not enabled on the local server.'
+        return 'RCON is not enabled on the local server.', None
     colony = meta.get('colony_id') or 1
-    done, failed, not_creative, operators, player = [], [], [], [], None
+    replies, not_creative, operators, player = [], [], [], None
     try:
         client.connect()
         operators = online_operators(client, server_dir)
         if cids is None:
             cids = sorted(colony_citizens(client, colony))
-        # The modify command only runs for the server console or a player in Creative, so run it as a connected operator.
         candidates = list(operators)
         for cid in cids:
             while candidates:
                 reply = CODES_RE.sub('', client.command(
-                    f'execute as {candidates[0]} run mc citizens modify {colony} {cid} saturation = {HUNGRY_SATURATION}')).strip()
+                    f'execute as {candidates[0]} run mc citizens modify {colony} {cid} {argument}')).strip()
                 if NOT_CREATIVE not in reply:
                     break
                 not_creative.append(candidates.pop(0))
             if not candidates:
                 break
             player = candidates[0]
-            if sat := re.search(r'is now (-?[\d.]+)\.', reply):
-                done.append((cid, float(sat.group(1))))
-            else:
-                failed.append((cid, reply or 'no answer'))
+            replies.append((cid, reply))
     except ConnectionRefusedError:
-        return False, 'The local server is offline.'
+        return 'The local server is offline.', None
     except (OSError, RconError) as error:
-        return False, f'Could not reach the server: {error}'
+        return f'Could not reach the server: {error}', None
     finally:
         client.close()
+    if not operators:
+        known = ', '.join(operator_names(server_dir)) or 'nobody, ops.json is empty'
+        return f'No operator is connected. Join the server as an operator ({known}) to use this.', None
+    if not replies and not_creative:
+        return f'{", ".join(not_creative)} {"is" if len(not_creative) == 1 else "are"} not in Creative. Switch to Creative and try again.', None
+    return None, {'cids': list(cids), 'player': player, 'replies': replies}
 
+
+def summarize_modify(outcome, done, failed, single_ok, many_ok):
+    """One message for a modify run: the single-citizen wording, or a count with the first failure."""
+    if len(outcome['cids']) == 1:
+        return (True, single_ok) if done and not failed else (False, failed[0][1] if failed else 'The server gave no answer.')
+    message = many_ok.format(done=len(done), total=len(outcome['cids']), player=outcome['player'])
+    if failed:
+        message += f' Failed for {", ".join(f"#{cid}" for cid, _ in failed)}: {failed[0][1]}'
+    return bool(done), message
+
+
+def make_hungry(cids=None):
+    """Set saturation just below the eating threshold for these citizens, or for all of them. Returns (ok, message)."""
+    error, outcome = modify_citizens(cids, f'saturation = {HUNGRY_SATURATION}')
+    if error:
+        return False, error
+    done, failed = [], []
+    for cid, reply in outcome['replies']:
+        if sat := re.search(r'is now (-?[\d.]+)\.', reply):
+            done.append((cid, float(sat.group(1))))
+        else:
+            failed.append((cid, reply or 'no answer'))
     if done:
         ts = datetime.now()
         with lock:
             for cid, value in done:
                 record = citizen(cid)
-                add_event(record, ts, 'action', f'Made hungry from the panel as {player}, saturation set to {value:.1f}')
+                add_event(record, ts, 'action', f"Made hungry from the panel as {outcome['player']}, saturation set to {value:.1f}")
                 apply_saturation(record, ts, value, 'rcon')
-    if not operators:
-        known = ', '.join(operator_names(server_dir)) or 'nobody, ops.json is empty'
-        return False, f'No operator is connected. Join the server as an operator ({known}) to use this.'
-    if not done and not_creative and len(not_creative) == len(operators):
-        return False, f'{", ".join(not_creative)} {"is" if len(not_creative) == 1 else "are"} not in Creative. Switch to Creative and try again.'
-    if len(cids) == 1 and not failed and done:
-        return True, f'Saturation set to {done[0][1]:.1f} as {player}. They go to eat on their next check.'
-    if len(cids) == 1:
-        return False, failed[0][1] if failed else 'The server gave no answer.'
-    message = f'{len(done)} of {len(cids)} citizens set to saturation {HUNGRY_SATURATION:.0f} as {player}.'
-    if failed:
-        message += f' Failed for {", ".join(f"#{cid}" for cid, _ in failed)}: {failed[0][1]}'
-    return bool(done), message
+    single = f"Saturation set to {done[0][1]:.1f} as {outcome['player']}. They go to eat on their next check." if done else ''
+    return summarize_modify(outcome, done, failed, single,
+                            '{done} of {total} citizens set to saturation ' + f'{HUNGRY_SATURATION:.0f}' + ' as {player}.')
+
+
+def clear_food_history(cids=None):
+    """Empty the in-game food history of these citizens, or of all of them. Returns (ok, message).
+
+    Needs a MineColonies build with /mc citizens modify ... foodHistory clear."""
+    error, outcome = modify_citizens(cids, 'foodHistory clear')
+    if error:
+        return False, error
+    done, failed = [], []
+    for cid, reply in outcome['replies']:
+        if re.search(r'is now 0\.', reply):
+            done.append(cid)
+        elif 'Unknown or incomplete command' in reply or 'Incorrect argument' in reply:
+            return False, 'This MineColonies version has no foodHistory clear command. It needs a build that includes it.'
+        else:
+            failed.append((cid, reply or 'no answer'))
+    if done:
+        ts = datetime.now()
+        with lock:
+            for cid in done:
+                add_event(citizen(cid), ts, 'action', f"Food history cleared from the panel as {outcome['player']}")
+    return summarize_modify(outcome, done, failed, f"Food history cleared as {outcome['player']}.",
+                            'Food history cleared for {done} of {total} citizens as {player}.')
 
 
 def glow_selector(cid, colony):
@@ -987,6 +1028,9 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
         if url.path == '/api/hungry' and (query.get('id', [''])[0].isdigit() or query.get('all') == ['1']):
             ok, message = make_hungry(None if query.get('all') == ['1'] else [int(query['id'][0])])
+            self.send(200 if ok else 409, json.dumps({'ok': ok, 'message': message}), 'application/json')
+        elif url.path == '/api/food-history/clear' and (query.get('id', [''])[0].isdigit() or query.get('all') == ['1']):
+            ok, message = clear_food_history(None if query.get('all') == ['1'] else [int(query['id'][0])])
             self.send(200 if ok else 409, json.dumps({'ok': ok, 'message': message}), 'application/json')
         elif url.path == '/api/locate' and query.get('id', [''])[0].isdigit():
             ok, message = locate_citizen(int(query['id'][0]))

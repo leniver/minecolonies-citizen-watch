@@ -246,6 +246,7 @@ section { margin-top: 34px; }
 .hunger-actions p { color: var(--ink-soft); flex: 1 1 14rem; margin: 0; }
 .hunger-actions p.is-error { color: var(--brick); }
 .roster-actions { margin: 0 0 12px; }
+.roster-actions button + p + button { margin-top: 8px; }
 .roster-actions button { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 12px; width: 100%; }
 .roster-actions button:disabled { cursor: default; opacity: .55; }
 .roster-actions p { color: var(--ink-soft); font-size: .9rem; margin: 6px 0 0; }
@@ -346,6 +347,8 @@ section { margin-top: 34px; }
       <div class="roster-actions">
         <button type="button" id="hungryAllBtn">Make everyone hungry</button>
         <p id="hungryAllStatus" role="status" hidden></p>
+        <button type="button" id="clearFoodAllBtn">Clear everyone's food history</button>
+        <p id="clearFoodAllStatus" role="status" hidden></p>
       </div>
       <input class="search" id="search" type="search" placeholder="Find by name or ID" aria-label="Find a citizen">
     </div>
@@ -384,6 +387,10 @@ section { margin-top: 34px; }
         <div class="strip" id="strip"></div>
         <div class="strip-ends"><span>Oldest</span><span>Newest</span></div>
         <p class="meal-stats" id="mealStats"></p>
+        <div class="hunger-actions" id="mealActions">
+          <button type="button" id="clearFoodBtn">Clear food history</button>
+          <p id="clearFoodStatus" role="status">Empties their in-game food history, as if they had never eaten.</p>
+        </div>
       </section>
 
       <div class="pair">
@@ -839,7 +846,7 @@ function renderDetail(data) {
   $('name').textContent = c.name;
   const isFormer = Boolean(c.left_t);
   // A former citizen's ID now belongs to someone else, so nothing on the page may act on it.
-  for (const id of ['followBtn', 'locateBtn', 'hungerActions', 'cmdSection']) $(id).hidden = isFormer;
+  for (const id of ['followBtn', 'locateBtn', 'hungerActions', 'mealActions', 'cmdSection']) $(id).hidden = isFormer;
   $('formerNote').hidden = !isFormer;
   if (isFormer) {
     $('formerNote').textContent = `Left the colony ${ago(c.left_t, data.now)} (${clock(c.left_t)}). MineColonies gives ID ${c.id} to the next new citizen, so this is their saved history only.`;
@@ -866,6 +873,13 @@ function renderDetail(data) {
     $('hungryStatus').className = '';
   }
   hungryBtn.dataset.id = String(c.id);
+  const clearFoodBtn = $('clearFoodBtn');
+  if (clearFoodBtn.dataset.id !== String(c.id)) {
+    $('clearFoodStatus').textContent = 'Empties their in-game food history, as if they had never eaten.';
+    $('clearFoodStatus').className = '';
+  }
+  clearFoodBtn.dataset.id = String(c.id);
+  if (!clearFoodBtn.dataset.busy) clearFoodBtn.disabled = meta.rcon_status !== 'connected' || !operator;
   hungryBtn.dataset.hint = hint;
   if (!hungryBtn.dataset.busy) hungryBtn.disabled = meta.rcon_status !== 'connected' || !operator;
   const job = log.job || save.job;
@@ -998,9 +1012,10 @@ async function poll() {
     const ops = data.meta.operators_online || [];
     live.textContent = rs === 'connected' ? `Live from the local server, ${ops.length ? `${ops.join(', ')} online` : 'no operator online'}` : (rs === 'offline' ? 'Local server offline, using log and save' : (rs === 'disabled' ? 'Using log and save' : `Server: ${rs}`));
     window.__rconLive = rs === 'connected';
-    const allBtn = $('hungryAllBtn');
-    if (!allBtn.dataset.busy) allBtn.disabled = rs !== 'connected' || !ops.length;
-    allBtn.title = rs !== 'connected' ? 'Needs the local server running.' : (ops.length ? `Runs as ${ops[0]}` : 'Needs an operator connected in Creative.');
+    for (const allBtn of [$('hungryAllBtn'), $('clearFoodAllBtn')]) {
+      if (!allBtn.dataset.busy) allBtn.disabled = rs !== 'connected' || !ops.length;
+      allBtn.title = rs !== 'connected' ? 'Needs the local server running.' : (ops.length ? `Runs as ${ops[0]}` : 'Needs an operator connected in Creative.');
+    }
     if (selectedId === null && data.citizens.length) { /* keep the empty state until someone is picked */ }
     renderList(data.citizens);
     renderBoard(data);
@@ -1065,17 +1080,15 @@ $('interval').addEventListener('change', async () => {
     select.disabled = false;
   }
 });
-$('hungryAllBtn').addEventListener('click', async () => {
-  if (!window.confirm('Set every citizen\'s saturation to 2? They will all head off to eat at once.')) return;
-  const btn = $('hungryAllBtn');
-  const status = $('hungryAllStatus');
+async function runServerAction(btn, status, url, question) {
+  if (question && !window.confirm(question)) return;
   btn.disabled = true;
   btn.dataset.busy = '1';
   status.hidden = false;
   status.className = '';
   status.textContent = 'Sending to the server';
   try {
-    const res = await fetch('/api/hungry?all=1', { method: 'POST' });
+    const res = await fetch(url, { method: 'POST' });
     const body = await res.json();
     status.textContent = body.message;
     status.className = body.ok ? '' : 'is-error';
@@ -1086,27 +1099,15 @@ $('hungryAllBtn').addEventListener('click', async () => {
     delete btn.dataset.busy;
     await poll();
   }
-});
-$('hungryBtn').addEventListener('click', async () => {
-  const btn = $('hungryBtn');
-  const status = $('hungryStatus');
-  btn.disabled = true;
-  btn.dataset.busy = '1';
-  status.className = '';
-  status.textContent = 'Sending to the server';
-  try {
-    const res = await fetch(`/api/hungry?id=${btn.dataset.id}`, { method: 'POST' });
-    const body = await res.json();
-    status.textContent = body.message;
-    status.className = body.ok ? '' : 'is-error';
-  } catch (err) {
-    status.textContent = 'The panel server did not answer.';
-    status.className = 'is-error';
-  } finally {
-    delete btn.dataset.busy;
-    await poll();
-  }
-});
+}
+
+$('hungryAllBtn').addEventListener('click', () => runServerAction($('hungryAllBtn'), $('hungryAllStatus'), '/api/hungry?all=1',
+  'Set every citizen\'s saturation to 2? They will all head off to eat at once.'));
+$('clearFoodAllBtn').addEventListener('click', () => runServerAction($('clearFoodAllBtn'), $('clearFoodAllStatus'), '/api/food-history/clear?all=1',
+  'Clear the food history of every citizen in the colony? Their meal records in game are emptied, as if they had never eaten.'));
+$('hungryBtn').addEventListener('click', () => runServerAction($('hungryBtn'), $('hungryStatus'), `/api/hungry?id=${$('hungryBtn').dataset.id}`));
+$('clearFoodBtn').addEventListener('click', () => runServerAction($('clearFoodBtn'), $('clearFoodStatus'), `/api/food-history/clear?id=${$('clearFoodBtn').dataset.id}`,
+  `Clear the food history of ${$('name').textContent}? Their meal records in game are emptied.`));
 $('locateBtn').addEventListener('click', () => locate(Number($('locateBtn').dataset.locateId), $('locateBtn'), $('locateStatus')));
 $('followBtn').addEventListener('click', async () => {
   const btn = $('followBtn');
