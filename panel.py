@@ -49,6 +49,7 @@ GLOW_CHOICES = (10, 30, 60, 120, 300)  # Locate outline lengths offered on the p
 DEFAULT_GLOW_SECONDS = 30   # as long as MineColonies' own colony map tracking highlight
 GLOW_SLACK = 1.5            # the effect gets this much extra game time; the panel clears it at the exact real time
 ROSTER_SECONDS = 10         # how often the full citizen list is read over RCON
+RENAME_WINDOW_SECONDS = 60  # a new name on an ID seen this soon after the last citizen list is a rename, later a replacement
 NEW_CITIZEN_MINUTES = 30    # a citizen who joined within this long is shown as new
 INFO_KEYS = ('loaded', 'health', 'job', 'state', 'job_ai', 'job_state', 'stuck', 'food')
 MONTHS = {m: i for i, m in enumerate(
@@ -60,6 +61,7 @@ names = {}
 watched = {}
 following = set()
 roster = {}                 # citizen id -> name, everyone in the colony at the last roster reading
+former = []                 # records of citizens who left, each with a key like "57.1"; MineColonies reuses their IDs
 missing_since = {}          # citizen id -> first reading they were missing from; they only count as gone after a second one
 wake_poller = threading.Event()  # set to cut the RCON poller's wait short
 glows = {}                  # citizen id -> {'until': real end time, 'rate': tick rate the effect was sized for, 'colony': id}
@@ -99,7 +101,7 @@ def food_name(item_id):
 
 
 def citizen(cid, name=None):
-    record = citizens.setdefault(cid, {'id': cid, 'name': f'#{cid}', 'log': {}, 'save': {}, 'events': []})
+    record = citizens.setdefault(cid, {'id': cid, 'key': str(cid), 'name': f'#{cid}', 'log': {}, 'save': {}, 'events': []})
     if name:
         record['name'] = name
         names[name] = cid
@@ -130,6 +132,23 @@ def add_event(record, when, kind, text, before=None, after=None):
 def is_older(ts, last_iso):
     """Readings older than what is already known come from re-reading a log after a restart."""
     return last_iso is not None and iso(ts) < last_iso
+
+
+def retire(cid, ts):
+    """Archive the record of a citizen who left: MineColonies gives their ID to the next new citizen."""
+    record = citizens.pop(cid, None)
+    if record is None:
+        return
+    record['key'] = f"{cid}.{1 + sum(1 for r in former if r['id'] == cid)}"
+    record['left_t'] = iso(ts)
+    former.append(record)
+    if names.get(record['name']) == cid:
+        del names[record['name']]
+    if cid in following:
+        set_following(cid, False)
+    for table in (journaled_info, journaled_saturation, missing_since):
+        table.pop(cid, None)
+    write_journal({'type': 'retire', 'id': cid, 't': iso(ts), 'name': record['name']})
 
 
 # ------------------------------------------------------------------------------------- shared parsing
@@ -177,7 +196,7 @@ def parse_state_continuation(fields, text):
 
 def apply_saturation(record, ts, value, source):
     log = record['log']
-    if is_older(ts, log.get('saturation_t')):
+    if is_older(ts, log.get('saturation_t')) or is_older(ts, record.get('since')):
         return
     previous = log.get('saturation')
     last_written = journaled_saturation.get(record['id'])
@@ -202,8 +221,8 @@ def apply_info(cid, name, ts, fields, source):
         log['position'] = fields['position']
     if 'state' not in fields and 'food' not in fields:
         return  # a /mc citizens list line, not an info reading
-    if is_older(ts, log.get('t')):
-        return
+    if is_older(ts, log.get('t')) or is_older(ts, record.get('since')):
+        return  # re-read log, or a reading about whoever held this ID before
 
     if 'state' in fields and log.get('state') and log['state'] != fields['state']:
         add_event(record, ts, 'state', f"{log['state']} to {fields['state']}")
@@ -614,7 +633,8 @@ def apply_colony(name, colony_id):
 def apply_save_entry(cid, name, entry):
     record = citizen(cid, name)
     save = record['save']
-    if is_older(datetime.fromisoformat(entry['t']), save.get('t')):
+    saved_at = datetime.fromisoformat(entry['t'])
+    if is_older(saved_at, save.get('t')) or is_older(saved_at, record.get('since')):
         return
     if save and save.get('foods') != entry['foods']:
         add_event(record, datetime.fromisoformat(entry['t']), 'save-food', 'Food history changed in the colony save',
@@ -640,11 +660,23 @@ def apply_roster(members, ts, source):
         missing_since.setdefault(cid, ts)
     current = dict(members)
     current.update({cid: roster[cid] for cid in missing - gone})  # still counted until confirmed
+    previous_t = meta.get('roster_t')
+    # Same ID, new name: a rename if the last list is recent, otherwise someone left and a new citizen took the ID.
+    recent = previous_t is not None and (ts - datetime.fromisoformat(previous_t)).total_seconds() <= RENAME_WINDOW_SECONDS
+    renamed = {cid for cid in set(members) & set(roster) if members[cid] != roster[cid]}
+    replaced = set() if recent else renamed
+    if known and not replaying:  # the journal's own event and retire lines rebuild all of this on replay
+        for cid in sorted(gone | replaced):
+            left_at = missing_since.pop(cid, ts)
+            add_event(citizen(cid), left_at, 'left', 'Left the colony')
+            retire(cid, left_at)
+        for cid in sorted(renamed - replaced):
+            add_event(citizen(cid), ts, 'renamed', f'Renamed from {roster[cid]} to {members[cid]}')
     if known:
-        for cid in sorted(set(members) - set(roster)):
-            add_event(citizen(cid, members[cid]), ts, 'joined', 'Joined the colony')
-        for cid in sorted(gone):
-            add_event(citizen(cid, roster[cid]), missing_since.pop(cid, ts), 'left', 'Left the colony')
+        for cid in sorted((set(members) - set(roster)) | replaced):
+            record = citizen(cid, members[cid])
+            record.setdefault('since', previous_t or iso(ts))  # anything read before this belongs to someone else
+            add_event(record, ts, 'joined', 'Joined the colony')
     if current != roster:
         write_journal({'type': 'roster', 't': iso(ts), 'source': source, 'members': {str(k): v for k, v in current.items()}})
         for cid, name in current.items():
@@ -804,11 +836,13 @@ def replay_journal(path):
                         set_poll_ticks(min(POLL_TICKS, key=lambda ticks: abs(ticks - wanted)))
                     elif kind == 'roster':
                         apply_roster({int(k): v for k, v in entry['members'].items()}, ts, entry['source'])
+                    elif kind == 'retire':
+                        retire(entry['id'], ts)
                 except (ValueError, KeyError, TypeError):
                     continue  # a torn last line after a crash, or a line from a newer panel
     finally:
         replaying = False
-    for record in citizens.values():
+    for record in list(citizens.values()) + former:
         record['events'].sort(key=lambda event: event['t'] or '')
         del record['events'][:-MAX_EVENTS]
     return True
@@ -840,11 +874,12 @@ def summary(record):
     dupes = any(a == b for a, b in zip(items, items[1:]))
     times = [t for t in (record['log'].get('t'), record['save'].get('t')) if t]
     joined = [e['t'] for e in record['events'] if e['kind'] == 'joined']
-    return {'id': record['id'], 'name': record['name'],
+    is_former = 'left_t' in record
+    return {'id': record['id'], 'key': record['key'], 'former': is_former, 'left_t': record.get('left_t'), 'name': record['name'],
             'job': record['log'].get('job') or record['save'].get('job'),
             'meals': len(items), 'duplicates': dupes, 'last': max(times) if times else None,
-            'following': record['id'] in following,
-            'in_colony': (record['id'] in roster) if meta.get('roster_t') else None,
+            'following': not is_former and record['id'] in following,
+            'in_colony': False if is_former else ((record['id'] in roster) if meta.get('roster_t') else None),
             'joined': joined[-1] if joined else None}
 
 
@@ -867,8 +902,8 @@ def followed_card(record):
 
 def roster_changes(limit=5):
     """Newest joins and departures across the colony."""
-    changes = [{'t': e['t'], 'kind': e['kind'], 'id': r['id'], 'name': r['name']}
-               for r in citizens.values() for e in r['events'] if e['kind'] in ('joined', 'left')]
+    changes = [{'t': e['t'], 'kind': e['kind'], 'id': r['id'], 'key': r['key'], 'name': r['name']}
+               for r in list(citizens.values()) + former for e in r['events'] if e['kind'] in ('joined', 'left')]
     return sorted(changes, key=lambda c: c['t'], reverse=True)[:limit]
 
 
@@ -893,16 +928,21 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             with lock:
                 selected = None
-                if query.get('id') and query['id'][0].isdigit():
-                    cid = int(query['id'][0])
+                key = query.get('id', [''])[0]
+                if key.isdigit():
+                    cid = int(key)
                     if time.time() - watched.get(cid, 0) >= WATCH_SECONDS:
                         wake_poller.set()  # a citizen the poller is not reading yet: start now, not after the wait
                     watched[cid] = time.time()
                     record = citizens.get(cid)
                     selected = json.loads(json.dumps(record)) if record else None
+                elif re.fullmatch(r'\d+\.\d+', key):  # a former citizen, read from the archive only
+                    record = next((r for r in former if r['key'] == key), None)
+                    selected = json.loads(json.dumps(record)) if record else None
                 payload = {'meta': dict(meta, following=sorted(following), roster_changes=roster_changes(),
                                         new_citizen_minutes=NEW_CITIZEN_MINUTES), 'now': iso(datetime.now()),
-                           'citizens': sorted((summary(r) for r in citizens.values()), key=lambda s: s['id']),
+                           'citizens': sorted((summary(r) for r in list(citizens.values()) + former),
+                                              key=lambda s: (s['former'], s['id'], s['key'])),
                            'followed': [followed_card(citizens[cid]) for cid in sorted(following) if cid in citizens],
                            'selected': selected}
             self.send(200, json.dumps(payload), 'application/json')

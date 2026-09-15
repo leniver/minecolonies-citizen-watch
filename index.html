@@ -150,6 +150,7 @@ main { padding: 28px clamp(18px, 4vw, 48px) 48px; max-width: 1120px; }
 .locate { background: var(--slot); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
 .locate.is-glowing, .card-actions button.is-glowing { border-color: var(--honey); color: var(--honey); }
 .locate:disabled, .card-actions button:disabled { cursor: default; }
+.former-note { background: color-mix(in srgb, var(--ink-soft) 14%, transparent); border-left: 3px solid var(--ink-soft); margin: 12px 0 0; padding: 8px 12px; }
 .locate-status { color: var(--ink-soft); font-size: .95rem; margin: 6px 0 0; }
 .locate-status.is-error { color: var(--brick); }
 .follow[aria-pressed="true"] { background: none; border-color: var(--emerald); color: var(--emerald); }
@@ -362,6 +363,7 @@ section { margin-top: 34px; }
         </div>
         <p class="sub" id="sub"></p>
         <p class="locate-status" id="locateStatus" role="status" hidden></p>
+        <p class="former-note" id="formerNote" hidden></p>
         <p class="follow-note" id="followNote" hidden>Read from the server at the interval set in the sidebar, even with this page closed. Everything is kept in the journal.</p>
         <p class="freshness"><span id="logFresh"></span><span id="saveFresh"></span></p>
         <div id="problems"></div>
@@ -390,7 +392,7 @@ section { margin-top: 34px; }
           <p class="sat-value" id="satValue"></p>
           <div class="meter" role="img" id="meter"><div class="fill" id="satFill"></div><div class="eat-line"></div></div>
           <div class="meter-scale"><span>Goes to eat at 2.5</span><span>Full at 60</span></div>
-          <div class="hunger-actions">
+          <div class="hunger-actions" id="hungerActions">
             <button type="button" id="hungryBtn">Make hungry</button>
             <p id="hungryStatus" role="status"></p>
           </div>
@@ -403,7 +405,7 @@ section { margin-top: 34px; }
         <ol class="events" id="events"></ol>
       </section>
 
-      <section aria-labelledby="cmdTitle">
+      <section aria-labelledby="cmdTitle" id="cmdSection">
         <h3 id="cmdTitle">Refresh from the game</h3>
         <p class="note" id="cmdNote"></p>
         <div class="commands" id="commands"></div>
@@ -439,10 +441,14 @@ let lastStripItems = null;
 let lastStripFor = null;
 let citizensCache = [];
 
+// A citizen is selected by key: "57" for whoever holds ID 57 now, "57.1" for a former citizen who had it before.
+const KEY_RE = /^\d+(\.\d+)?$/;
+const isFormerKey = (key) => key !== null && key.includes('.');
+
 function readSelection() {
-  const fromHash = parseInt(location.hash.slice(1), 10);
-  if (!Number.isNaN(fromHash)) return fromHash;
-  try { const saved = parseInt(localStorage.getItem('citizen-watch-id'), 10); if (!Number.isNaN(saved)) return saved; } catch (e) {}
+  const fromHash = location.hash.slice(1);
+  if (KEY_RE.test(fromHash)) return fromHash;
+  try { const saved = localStorage.getItem('citizen-watch-id'); if (saved && KEY_RE.test(saved)) return saved; } catch (e) {}
   return null;
 }
 
@@ -456,7 +462,7 @@ function showBoard() {
 
 function select(id) {
   boardMode = false;
-  selectedId = id;
+  selectedId = String(id);
   history.replaceState(null, '', '#' + id);
   try { localStorage.setItem('citizen-watch-id', String(id)); } catch (e) {}
   poll();
@@ -531,7 +537,7 @@ function renderInterval(meta) {
   }
   if (document.activeElement !== select) select.value = String(meta.poll_ticks);
   select.disabled = meta.rcon_status === 'disabled';
-  const count = new Set([...(meta.following || []), ...(!boardMode && selectedId !== null ? [selectedId] : [])]).size;
+  const count = new Set([...(meta.following || []), ...(!boardMode && selectedId !== null && !isFormerKey(selectedId) ? [Number(selectedId)] : [])]).size;
   const note = $('intervalNote');
   const loop = meta.poll_loop_seconds ?? count * SECONDS_PER_CITIZEN;
   const slow = loop > meta.poll_interval;
@@ -590,7 +596,7 @@ function renderArrivals(changes) {
     const btn = el('button', { type: 'button' });
     btn.append(el('span', { class: `kind-${change.kind}` }, change.kind === 'joined' ? 'Joined' : 'Left'),
       el('span', { class: 'arrival-name', title: `${change.name} #${change.id}` }, `${change.name} #${change.id}`), el('time', { datetime: change.t }, ago(change.t, serverNow)));
-    btn.addEventListener('click', () => select(change.id));
+    btn.addEventListener('click', () => select(change.key || change.id));
     li.append(btn);
     ul.append(li);
   }
@@ -604,11 +610,11 @@ function renderList(list) {
   const ul = $('list');
   ul.replaceChildren();
   // Citizens who left the colony go to the bottom.
-  const ordered = [...list].sort((a, b) => (a.in_colony === false) - (b.in_colony === false) || a.id - b.id);
+  const ordered = [...list].sort((a, b) => (a.in_colony === false) - (b.in_colony === false) || a.id - b.id || a.key.localeCompare(b.key));
   for (const c of ordered) {
     if (query && !(`${c.name} ${c.id}`.toLowerCase().includes(query))) continue;
     const li = el('li');
-    const btn = el('button', { role: 'option', 'aria-selected': String(!boardMode && c.id === selectedId), class: c.in_colony === false ? 'has-left' : '' });
+    const btn = el('button', { role: 'option', 'aria-selected': String(!boardMode && c.key === selectedId), class: c.in_colony === false ? 'has-left' : '' });
     btn.append(el('span', { class: 'who-name' }, c.name), el('span', { class: 'who-id' }, `#${c.id}`));
     const metaLine = el('span', { class: 'who-meta' });
     if (c.in_colony === false) metaLine.append('left the colony, ');
@@ -617,7 +623,7 @@ function renderList(list) {
     if (c.duplicates) metaLine.append(', ', el('span', { class: 'dup' }, 'repeats'));
     if (c.following) metaLine.append(', ', el('span', { class: 'followed' }, 'following'));
     btn.append(metaLine);
-    btn.addEventListener('click', () => select(c.id));
+    btn.addEventListener('click', () => select(c.key));
     li.append(btn);
     ul.append(li);
   }
@@ -816,7 +822,15 @@ function renderDetail(data) {
   const save = c.save || {};
 
   $('name').textContent = c.name;
-  const followed = (meta.following || []).includes(c.id);
+  const isFormer = Boolean(c.left_t);
+  // A former citizen's ID now belongs to someone else, so nothing on the page may act on it.
+  for (const id of ['followBtn', 'locateBtn', 'hungerActions', 'cmdSection']) $(id).hidden = isFormer;
+  $('formerNote').hidden = !isFormer;
+  if (isFormer) {
+    $('formerNote').textContent = `Left the colony ${ago(c.left_t, data.now)} (${clock(c.left_t)}). MineColonies gives ID ${c.id} to the next new citizen, so this is their saved history only.`;
+    $('locateStatus').hidden = true;
+  }
+  const followed = !isFormer && (meta.following || []).includes(c.id);
   const followBtn = $('followBtn');
   followBtn.setAttribute('aria-pressed', String(followed));
   followBtn.textContent = followed ? 'Stop following' : 'Keep following';
@@ -861,7 +875,7 @@ function renderDetail(data) {
   $('mealsSource').textContent = useLog
     ? readFrom(log.source, log.t)
     : (save.t ? `From the colony save at ${clock(save.t)}. Run the info command for a fresher reading.` : 'Nothing read yet.');
-  renderStrip(items, c.id);
+  renderStrip(items, c.key || c.id);
 
   const distinct = new Set(items).size;
   const repeats = runs(items).linksNext.filter(Boolean).length;
