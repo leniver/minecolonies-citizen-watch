@@ -78,7 +78,8 @@ Each followed citizen costs two RCON commands per read, and the full citizen lis
 ## Known limits
 
 - `/mc citizens info` fails on a citizen with an empty food history (MineColonies throws before printing it). The panel shows that as an empty history.
-- MineColonies pages its citizen list over an unordered map, so a list read while citizens are being recruited can skip people. The panel only uses a list that matches the colony's own count, and only counts a citizen as gone after two readings without them. It cannot tell a death from a dismissal.
+- The server collects the output of all RCON connections in one buffer, so commands sent at the same time get each other's replies. The panel sends its own commands one at a time, but another RCON tool used while the panel runs can still garble replies on both sides.
+- The citizen list is read page by page, so a list read while citizens join or leave, or garbled as above, can miss people. The panel only uses a list that matches the colony's own count, and only counts a citizen as gone after two readings without them. It cannot tell a death from a dismissal.
 - MineColonies gives a new citizen the lowest free ID, so an ID can belong to several citizens over time. The panel archives a citizen when they leave and starts a new record for whoever takes their ID; former citizens stay listed with their history. A name change seen within a minute of the previous citizen list counts as a rename, so a citizen who leaves and is replaced faster than that would be taken for a rename.
 - Locate needs the citizen to be loaded, which means a player nearby.
 - The colony save is only as fresh as the last world autosave.

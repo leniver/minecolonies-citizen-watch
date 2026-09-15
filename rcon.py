@@ -1,8 +1,13 @@
 """Tiny Source RCON client, as used by Minecraft servers."""
 import socket
 import struct
+import threading
 
 LOGIN, COMMAND, RESPONSE = 3, 2, 0
+
+# The server collects the output of every RCON connection in one shared buffer, so commands that run at the same time
+# get each other's replies. Every connection in this process sends one command at a time.
+_command_lock = threading.Lock()
 
 
 class RconError(Exception):
@@ -47,6 +52,10 @@ class Rcon:
             raise RconError('RCON password rejected')
 
     def command(self, text):
+        with _command_lock:
+            return self._command(text)
+
+    def _command(self, text):
         if self.sock is None:
             self.connect()
         try:
