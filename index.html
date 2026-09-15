@@ -85,6 +85,13 @@ body {
 .arrivals-box .arrivals { margin: 4px 0 0; }
 
 dialog.settings { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); max-width: calc(100vw - 32px); padding: 0; width: 440px; }
+.danger-zone { border-top: 1px solid var(--line); display: grid; gap: 8px; justify-items: start; padding-top: 14px; }
+.danger-zone h3 { margin: 0; }
+.danger-zone p { color: var(--ink-soft); font-size: .92rem; margin: 0; }
+.danger-zone p.is-error { color: var(--brick); }
+.danger { background: none; border: 1px solid var(--brick); border-radius: 6px; color: var(--brick); cursor: pointer; font: inherit; font-weight: 600; padding: 5px 14px; }
+.danger:hover { background: color-mix(in srgb, var(--brick) 12%, transparent); }
+.danger:disabled { cursor: default; opacity: .55; }
 dialog.settings::backdrop { background: rgba(0, 0, 0, .45); }
 .settings form { display: grid; gap: 16px; padding: 18px 20px 16px; }
 .settings h2 { font-size: 1.35rem; font-weight: 700; margin: 0; }
@@ -278,8 +285,10 @@ section { margin-top: 34px; }
 .refresh p { color: var(--ink-soft); font-size: .88rem; margin: 0; width: 100%; }
 .refresh p.is-slow { color: var(--honey); }
 .info { display: inline-flex; position: relative; }
-.info-btn { align-items: center; background: none; border: 1.5px solid var(--ink-soft); border-radius: 50%; color: var(--ink-soft); cursor: help; display: inline-flex; font: 600 .75rem/1 "Barlow Semi Condensed", system-ui, sans-serif; font-style: italic; height: 18px; justify-content: center; padding: 0; width: 18px; }
-.info-btn:hover, .info-btn:focus-visible { border-color: var(--ink); color: var(--ink); }
+/* Info icon: "Info Icon" from SVG Repo's Android App collection, CC0 License */
+.info-btn { align-items: center; background: none; border: 0; border-radius: 50%; color: var(--ink-soft); cursor: help; display: inline-flex; height: 18px; justify-content: center; padding: 0; width: 18px; }
+.info-btn svg { fill: currentColor; height: 100%; width: 100%; }
+.info-btn:hover, .info-btn:focus-visible { color: var(--ink); }
 .info-tip { background: var(--ink); border-radius: 5px; bottom: calc(100% + 8px); color: var(--panel); font-size: .88rem; left: 50%; line-height: 1.35; opacity: 0; padding: 6px 9px; pointer-events: none; position: absolute; transform: translateX(-50%); transition: opacity .12s ease; width: max-content; max-width: 240px; z-index: 2; }
 .info:hover .info-tip, .info-btn:focus-visible + .info-tip { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .info-tip { transition: none; } }
@@ -426,9 +435,15 @@ section { margin-top: 34px; }
       <label for="glow">Locate makes a citizen glow for</label>
       <select id="glow" aria-describedby="glowInfo"></select>
       <span class="info">
-        <button type="button" class="info-btn" aria-label="About the glow duration" aria-describedby="glowInfo">i</button>
+        <button type="button" class="info-btn" aria-label="About the glow duration" aria-describedby="glowInfo"><svg viewBox="0 0 416.979 416.979" aria-hidden="true" focusable="false"><path d="M356.004,61.156c-81.37-81.47-213.377-81.551-294.848-0.182c-81.47,81.371-81.552,213.379-0.181,294.85c81.369,81.47,213.378,81.551,294.849,0.181C437.293,274.636,437.375,142.626,356.004,61.156z M237.6,340.786c0,3.217-2.607,5.822-5.822,5.822h-46.576c-3.215,0-5.822-2.605-5.822-5.822V167.885c0-3.217,2.607-5.822,5.822-5.822h46.576c3.215,0,5.822,2.604,5.822,5.822V340.786z M208.49,137.901c-18.618,0-33.766-15.146-33.766-33.765c0-18.617,15.147-33.766,33.766-33.766c18.619,0,33.766,15.148,33.766,33.766C242.256,122.755,227.107,137.901,208.49,137.901z"/></svg></button>
         <span class="info-tip" role="tooltip" id="glowInfo">Real time. The panel adjusts it for the server's tick rate.</span>
       </span>
+    </div>
+    <div class="danger-zone">
+      <h3>Panel history</h3>
+      <p>Clears every timeline, meal history, arrival and former citizen the panel has recorded, to start fresh. Settings and followed citizens are kept. The old journal is kept as a file in the panel's data folder.</p>
+      <button type="button" class="danger" id="clearHistoryBtn">Clear history</button>
+      <p id="clearHistoryStatus" role="status"></p>
     </div>
     <div class="dialog-actions"><button type="submit">Done</button></div>
   </form>
@@ -1002,6 +1017,33 @@ try { $('arrivalsBox').open = localStorage.getItem('citizen-watch-arrivals-open'
 $('arrivalsBox').addEventListener('toggle', () => {
   try { localStorage.setItem('citizen-watch-arrivals-open', $('arrivalsBox').open ? '1' : '0'); } catch (e) {}
   poll();
+});
+$('clearHistoryBtn').addEventListener('click', async () => {
+  if (!window.confirm('Clear the whole panel history? Every timeline, meal history and former citizen is removed. Settings and followed citizens are kept.')) return;
+  const btn = $('clearHistoryBtn');
+  const status = $('clearHistoryStatus');
+  btn.disabled = true;
+  status.className = '';
+  status.textContent = 'Clearing';
+  try {
+    const res = await fetch('/api/reset', { method: 'POST' });
+    const body = await res.json();
+    if (!body.ok) throw new Error(body.message);
+    // Forget what the page itself remembers about the old history too.
+    cardEls.forEach((card) => card.remove());
+    cardEls.clear();
+    seenRosterChanges.clear();
+    rosterChangesRendered = false;
+    lastStripItems = null;
+    lastStripFor = null;
+    status.textContent = `History cleared. The old journal was saved as data/${body.archive}.`;
+  } catch (err) {
+    status.className = 'is-error';
+    status.textContent = err.message || 'The panel server did not answer.';
+  } finally {
+    btn.disabled = false;
+    await poll();
+  }
 });
 $('glow').addEventListener('change', async () => {
   const select = $('glow');

@@ -64,6 +64,7 @@ roster = {}                 # citizen id -> name, everyone in the colony at the 
 former = []                 # records of citizens who left, each with a key like "57.1"; MineColonies reuses their IDs
 missing_since = {}          # citizen id -> first reading they were missing from; they only count as gone after a second one
 wake_poller = threading.Event()  # set to cut the RCON poller's wait short
+reload_save = threading.Event()  # set to make the save follower read the current save again
 glows = {}                  # citizen id -> {'until': real end time, 'rate': tick rate the effect was sized for, 'colony': id}
 glow_lock = threading.Lock()
 meta = {'log_path': None, 'save_path': None, 'log_updated': None, 'save_updated': None, 'rcon_updated': None,
@@ -573,7 +574,7 @@ def poll_rcon(server_dir):
                     meta['tick_rate'] = rate
                     update_poll_interval()
                 last_tick_rate = now
-            if now - last_roster >= ROSTER_SECONDS:
+            if now - last_roster >= ROSTER_SECONDS or meta.get('roster_t') is None:
                 # The list is paged over a HashMap, so citizens added between page requests can shift the order and
                 # make a reading skip or repeat people. Only trust a reading that matches the colony's own count.
                 count_before = colony_citizen_count(client, colony)
@@ -693,7 +694,7 @@ def apply_save(root, mtime):
     when = datetime.fromtimestamp(mtime)
     apply_colony(root.get('name'), root.get('id'))
     saved = root.get('citizenManager', {}).get('citizens', [])
-    if saved:
+    if saved and meta.get('rcon_status') != 'connected':  # the live citizen list is fresher than any save
         apply_roster({rec['id']: rec.get('name', f"#{rec['id']}") for rec in saved}, when, 'save')
     for rec in saved:
         foods = [food_name(x) for x in rec.get('lastfoods', [])]
@@ -728,6 +729,9 @@ def follow_save(path_patterns):
     last_seen = None
     pending = None
     while True:
+        if reload_save.is_set():
+            reload_save.clear()
+            last_seen = None  # read the current save again, as if it had just been written
         try:
             files = []
             for pattern in path_patterns:  # first pattern with a match wins
@@ -790,6 +794,35 @@ def set_poll_ticks(ticks):
     meta['poll_ticks'] = ticks
     update_poll_interval()
     wake_poller.set()
+
+
+def reset_history():
+    """Start from scratch: archive the journal, forget every citizen, keep settings and the follow list. Callers hold the lock."""
+    global journal
+    path = Path(meta['journal_path'])
+    archive = path.with_name(f'journal-archive-{datetime.now():%Y%m%d-%H%M%S}.jsonl')
+    if journal is not None:
+        journal.close()
+        journal = None
+    if path.exists():
+        path.rename(archive)
+    for table in (citizens, names, watched, journaled_info, journaled_saturation, roster, missing_since):
+        table.clear()
+    former.clear()
+    for key in ('log_updated', 'save_updated', 'rcon_updated', 'roster_t', 'roster_source', 'roster_skipped'):
+        meta[key] = None
+    open_journal(path)
+    now = iso(datetime.now())
+    write_journal({'type': 'reset', 't': now, 'archive': archive.name})
+    write_journal({'type': 'setting', 'poll_ticks': meta['poll_ticks'], 't': now})
+    write_journal({'type': 'setting', 'glow_seconds': meta['glow_seconds'], 't': now})
+    for cid in sorted(following):
+        write_journal({'type': 'follow', 'id': cid, 'on': True, 't': now})
+    if meta.get('colony') is not None:
+        write_journal({'type': 'colony', 'name': meta['colony'], 'colony_id': meta['colony_id']})
+    reload_save.set()
+    wake_poller.set()  # the next round reads the citizen list again and makes it the new starting point
+    return archive.name
 
 
 def set_following(cid, on):
@@ -958,6 +991,13 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == '/api/locate' and query.get('id', [''])[0].isdigit():
             ok, message = locate_citizen(int(query['id'][0]))
             self.send(200 if ok else 409, json.dumps({'ok': ok, 'message': message, 'seconds': meta['glow_seconds']}), 'application/json')
+        elif url.path == '/api/reset':
+            try:
+                with lock:
+                    archive = reset_history()
+                self.send(200, json.dumps({'ok': True, 'archive': archive}), 'application/json')
+            except OSError as error:
+                self.send(500, json.dumps({'ok': False, 'message': f'Could not start a new journal: {error}'}), 'application/json')
         elif url.path == '/api/settings' and (query.get('ticks') or query.get('glow')):
             try:
                 with lock:

@@ -69,6 +69,7 @@ The **Settings** button next to the title sets:
 
 - **Read from the server every:** from 1 to 600 game ticks. The panel reads the server's tick rate, so the interval stays in step with the game when you change `/tick rate`.
 - **Locate makes a citizen glow for:** 10 seconds to 5 minutes of real time, whatever the tick rate.
+- **Clear history:** starts fresh by forgetting every timeline, meal history and former citizen. Settings and followed citizens are kept, and the old journal is renamed to `data/journal-archive-<date>-<time>.jsonl` rather than deleted.
 
 ## Load on the server
 
